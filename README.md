@@ -9,7 +9,7 @@ The project currently provides a first working vertical slice:
 
 - `bash`-style command execution through the current `mvdan/sh` development branch
 - interactive mode when started without arguments
-- interactive `Tab` completion for builtin commands and filesystem paths
+- interactive `Tab` completion for builtin commands and filesystem paths via a `bubbletea` prompt
 - `-c` command execution mode
 - script file execution mode
 - builtin-first command dispatch

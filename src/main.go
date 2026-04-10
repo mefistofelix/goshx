@@ -17,7 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chzyer/readline"
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	urootcore "github.com/u-root/u-root/pkg/core"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
@@ -65,6 +66,14 @@ type shell_options struct {
 }
 
 type builtin_handler func(builtin_context) int
+
+type shell_prompt struct {
+	app         *shell_app
+	input       textinput.Model
+	submitted   string
+	interrupted bool
+	eof         bool
+}
 
 func main() {
 	os.Exit(run_main())
@@ -185,7 +194,7 @@ func (app *shell_app) register_builtins() {
 
 func (app *shell_app) run_interactive() int {
 	if stdin_file, ok := app.stdin.(*os.File); ok && term.IsTerminal(int(stdin_file.Fd())) {
-		return app.run_interactive_readline(stdin_file)
+		return app.run_interactive_bubbletea(stdin_file)
 	}
 	return app.run_interactive_plain()
 }
@@ -222,38 +231,28 @@ func (app *shell_app) run_interactive_plain() int {
 	}
 }
 
-func (app *shell_app) run_interactive_readline(stdin_file *os.File) int {
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          app.prompt(),
-		AutoComplete:    app,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
-		Stdin:           stdin_file,
-		Stdout:          app.stdout,
-		Stderr:          app.stderr,
-	})
-	if err != nil {
-		fmt.Fprintln(app.stderr, err)
-		return app.run_interactive_plain()
-	}
-	defer rl.Close()
+func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
 	for {
-		line, err := rl.Readline()
-		if errors.Is(err, readline.ErrInterrupt) {
-			if line == "" {
-				fmt.Fprintln(app.stdout)
-				continue
-			}
-		}
-		if errors.Is(err, io.EOF) {
-			fmt.Fprintln(app.stdout)
-			return 0
-		}
+		model := new_shell_prompt(app)
+		program := tea.NewProgram(model, tea.WithInput(stdin_file), tea.WithOutput(app.stdout))
+		final_model, err := program.Run()
 		if err != nil {
 			fmt.Fprintln(app.stderr, err)
+			return app.run_interactive_plain()
+		}
+		prompt_model, ok := final_model.(shell_prompt)
+		if !ok {
+			fmt.Fprintln(app.stderr, "interactive prompt error")
 			return 1
 		}
-		line = strings.TrimSpace(line)
+		fmt.Fprintln(app.stdout)
+		if prompt_model.eof {
+			return 0
+		}
+		if prompt_model.interrupted {
+			continue
+		}
+		line := strings.TrimSpace(prompt_model.submitted)
 		if line == "" {
 			continue
 		}
@@ -278,7 +277,55 @@ func (app *shell_app) prompt() string {
 	return "goshx$ "
 }
 
-func (app *shell_app) Do(line []rune, pos int) ([][]rune, int) {
+func new_shell_prompt(app *shell_app) shell_prompt {
+	input := textinput.New()
+	input.Prompt = app.prompt()
+	input.ShowSuggestions = true
+	input.Focus()
+	prompt := shell_prompt{
+		app:   app,
+		input: input,
+	}
+	prompt.refresh_suggestions()
+	return prompt
+}
+
+func (m shell_prompt) Init() tea.Cmd {
+	return textinput.Blink
+}
+
+func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			m.interrupted = true
+			return m, tea.Quit
+		case "ctrl+d":
+			if m.input.Value() == "" {
+				m.eof = true
+				return m, tea.Quit
+			}
+		case "enter":
+			m.submitted = m.input.Value()
+			return m, tea.Quit
+		}
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	m.refresh_suggestions()
+	return m, cmd
+}
+
+func (m shell_prompt) View() string {
+	return m.input.View()
+}
+
+func (m *shell_prompt) refresh_suggestions() {
+	m.input.SetSuggestions(m.app.complete_suggestions([]rune(m.input.Value()), m.input.Position()))
+}
+
+func (app *shell_app) complete_suggestions(line []rune, pos int) []string {
 	if pos < 0 || pos > len(line) {
 		pos = len(line)
 	}
@@ -292,17 +339,7 @@ func (app *shell_app) Do(line []rune, pos int) ([][]rune, int) {
 	} else {
 		suggestions = app.complete_command_candidates(token)
 	}
-	if len(suggestions) == 0 {
-		return nil, 0
-	}
-	out := make([][]rune, 0, len(suggestions))
-	for _, suggestion := range suggestions {
-		if !strings.HasPrefix(strings.ToLower(suggestion), strings.ToLower(token)) {
-			continue
-		}
-		out = append(out, []rune(suggestion[len(token):]))
-	}
-	return out, len(token)
+	return suggestions
 }
 
 func completion_segment_start(line []rune) int {
