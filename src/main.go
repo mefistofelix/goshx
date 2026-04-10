@@ -967,6 +967,7 @@ func (app *shell_app) complete_command_candidates(token string) []string {
 	lower_token := strings.ToLower(token)
 	seen := map[string]bool{}
 	candidates := make([]string, 0, len(app.builtins)+64)
+	windows_exts := app.runtime_path_exts()
 	add := func(name string) {
 		if strings.HasPrefix(strings.ToLower(name), lower_token) && !seen[name] {
 			seen[name] = true
@@ -980,7 +981,10 @@ func (app *shell_app) complete_command_candidates(token string) []string {
 		add(name)
 	}
 	// scan PATH directories for executables
-	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+	for _, dir := range filepath.SplitList(app.runtime_env_value("PATH")) {
+		if dir == "" {
+			continue
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue
@@ -992,11 +996,14 @@ func (app *shell_app) complete_command_candidates(token string) []string {
 			name := entry.Name()
 			if runtime.GOOS == "windows" {
 				ext := strings.ToLower(filepath.Ext(name))
-				switch ext {
-				case ".exe", ".bat", ".cmd":
-					name = name[:len(name)-len(ext)]
-				default:
+				if !windows_exts[ext] {
+					if ext == "" && app.is_windows {
+						add(name)
+					}
 					continue
+				}
+				if ext != "" {
+					name = name[:len(name)-len(ext)]
 				}
 			}
 			add(name)
@@ -1004,6 +1011,75 @@ func (app *shell_app) complete_command_candidates(token string) []string {
 	}
 	sort.Strings(candidates)
 	return candidates
+}
+
+func (app *shell_app) runtime_env_value(name string) string {
+	if app.runner != nil {
+		if value, ok := runtime_var_value(app.runner.Vars, name); ok {
+			return value
+		}
+	}
+	if value, ok := runtime_list_env_value(app.env, name); ok {
+		return value
+	}
+	return ""
+}
+
+func runtime_var_value(vars map[string]expand.Variable, name string) (string, bool) {
+	if len(vars) == 0 {
+		return "", false
+	}
+	if vr, ok := vars[name]; ok && vr.IsSet() && vr.Kind == expand.String {
+		return vr.String(), true
+	}
+	if runtime.GOOS == "windows" {
+		upper_name := strings.ToUpper(name)
+		for key, vr := range vars {
+			if strings.ToUpper(key) == upper_name && vr.IsSet() && vr.Kind == expand.String {
+				return vr.String(), true
+			}
+		}
+	}
+	return "", false
+}
+
+func runtime_list_env_value(env []string, name string) (string, bool) {
+	if runtime.GOOS == "windows" {
+		upper_name := strings.ToUpper(name)
+		for _, entry := range env {
+			key, value, ok := strings.Cut(entry, "=")
+			if ok && strings.ToUpper(key) == upper_name {
+				return value, true
+			}
+		}
+		return "", false
+	}
+	prefix := name + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			return entry[len(prefix):], true
+		}
+	}
+	return "", false
+}
+
+func (app *shell_app) runtime_path_exts() map[string]bool {
+	exts := map[string]bool{}
+	if runtime.GOOS != "windows" {
+		return exts
+	}
+	path_ext := app.runtime_env_value("PATHEXT")
+	if path_ext == "" {
+		path_ext = ".COM;.EXE;.BAT;.CMD"
+	}
+	for _, ext := range strings.Split(path_ext, ";") {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			continue
+		}
+		exts[strings.ToLower(ext)] = true
+	}
+	return exts
 }
 
 func shell_builtin_names() []string {
