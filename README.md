@@ -77,10 +77,11 @@ When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that support
 - multiline shell input
 - `Enter` inserts a new line when the shell input is incomplete, including trailing `\` line continuations
 - paste at the current caret position
+- `Home` moves the caret to the start of the full prompt buffer
 - a prompt prefix that shows the current working directory
 - `End` moves the caret to the end of the full prompt buffer
-- `Up` and `Down` history browsing only when the caret is at the absolute start or end of the prompt buffer
-- `PgUp` and `PgDn` filtered history browsing only when the caret is at the absolute start or end of the prompt buffer
+- `Up`, `Down`, `PgUp`, and `PgDn` history browsing only when the caret is at the absolute start or end of the prompt buffer
+- history navigation keeps the caret anchored to the same logical edge, start or end, across recalled entries
 - `Esc` to clear the current prompt buffer
 
 Interactive history is loaded from `.goshx/history` relative to the `goshx` binary directory and new commands are appended after execution regardless of success or failure. The history file keeps exactly one escaped line per command so multiline input and literal backslashes round-trip correctly.

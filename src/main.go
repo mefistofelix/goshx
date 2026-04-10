@@ -123,6 +123,14 @@ type shell_prompt struct {
 	term_height            int
 }
 
+type prompt_edge int
+
+const (
+	prompt_edge_none prompt_edge = iota
+	prompt_edge_start
+	prompt_edge_end
+)
+
 func main() {
 	os.Exit(run_main())
 }
@@ -660,30 +668,33 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			m.apply_completion()
 			return m, nil
+		case "home":
+			m.move_cursor_to_prompt_start()
+			return m, nil
 		case "end":
 			m.move_cursor_to_prompt_end()
 			return m, nil
 		case "up":
-			if m.is_at_prompt_start() {
-				m.history_prev()
+			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+				m.history_prev(edge)
 				m.recalc_height()
 				return m, nil
 			}
 		case "down":
-			if m.is_at_prompt_end() {
-				m.history_next()
+			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+				m.history_next(edge)
 				m.recalc_height()
 				return m, nil
 			}
 		case "pgup":
-			if m.is_at_prompt_end() {
-				m.filtered_history_prev()
+			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+				m.filtered_history_prev(edge)
 				m.recalc_height()
 				return m, nil
 			}
 		case "pgdown":
-			if m.is_at_prompt_end() {
-				m.filtered_history_next()
+			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+				m.filtered_history_next(edge)
 				m.recalc_height()
 				return m, nil
 			}
@@ -795,6 +806,18 @@ func (m *shell_prompt) set_value_at_end(value string) {
 	m.move_cursor_to_prompt_end()
 }
 
+func (m *shell_prompt) set_value_at_start(value string) {
+	m.input.SetValue(value)
+	m.move_cursor_to_prompt_start()
+}
+
+func (m *shell_prompt) move_cursor_to_prompt_start() {
+	for m.input.Line() > 0 {
+		m.input.CursorUp()
+	}
+	m.input.CursorStart()
+}
+
 func (m *shell_prompt) move_cursor_to_prompt_end() {
 	for m.input.Line() < m.input.LineCount()-1 {
 		m.input.CursorDown()
@@ -839,7 +862,25 @@ func (m shell_prompt) is_at_prompt_end() bool {
 		line_info.CharOffset == line_info.CharWidth
 }
 
-func (m *shell_prompt) history_prev() {
+func (m shell_prompt) active_prompt_edge() prompt_edge {
+	if m.is_at_prompt_start() {
+		return prompt_edge_start
+	}
+	if m.is_at_prompt_end() {
+		return prompt_edge_end
+	}
+	return prompt_edge_none
+}
+
+func (m *shell_prompt) set_history_value(value string, edge prompt_edge) {
+	if edge == prompt_edge_start {
+		m.set_value_at_start(value)
+		return
+	}
+	m.set_value_at_end(value)
+}
+
+func (m *shell_prompt) history_prev(edge prompt_edge) {
 	m.reset_filtered_history()
 	if len(m.history) == 0 {
 		return
@@ -849,11 +890,11 @@ func (m *shell_prompt) history_prev() {
 	}
 	if m.history_index > 0 {
 		m.history_index--
-		m.set_value_at_end(m.history[m.history_index])
+		m.set_history_value(m.history[m.history_index], edge)
 	}
 }
 
-func (m *shell_prompt) history_next() {
+func (m *shell_prompt) history_next(edge prompt_edge) {
 	m.reset_filtered_history()
 	if len(m.history) == 0 {
 		return
@@ -863,13 +904,13 @@ func (m *shell_prompt) history_next() {
 	}
 	m.history_index++
 	if m.history_index == len(m.history) {
-		m.set_value_at_end(m.history_draft)
+		m.set_history_value(m.history_draft, edge)
 		return
 	}
-	m.set_value_at_end(m.history[m.history_index])
+	m.set_history_value(m.history[m.history_index], edge)
 }
 
-func (m *shell_prompt) filtered_history_prev() {
+func (m *shell_prompt) filtered_history_prev(edge prompt_edge) {
 	filter := m.input.Value()
 	if m.filtered_history_index >= 0 {
 		filter = m.history_filter
@@ -880,11 +921,11 @@ func (m *shell_prompt) filtered_history_prev() {
 	if m.filtered_history_index > 0 {
 		m.filtered_history_index--
 		item := m.filtered_history[m.filtered_history_index]
-		m.set_value_at_end(item)
+		m.set_history_value(item, edge)
 	}
 }
 
-func (m *shell_prompt) filtered_history_next() {
+func (m *shell_prompt) filtered_history_next(edge prompt_edge) {
 	filter := m.history_filter
 	if m.filtered_history_index < 0 {
 		filter = m.input.Value()
@@ -897,11 +938,11 @@ func (m *shell_prompt) filtered_history_next() {
 	}
 	m.filtered_history_index++
 	if m.filtered_history_index == len(m.filtered_history) {
-		m.set_value_at_end(m.history_draft)
+		m.set_history_value(m.history_draft, edge)
 		return
 	}
 	item := m.filtered_history[m.filtered_history_index]
-	m.set_value_at_end(item)
+	m.set_history_value(item, edge)
 }
 
 func (m *shell_prompt) prepare_filtered_history(filter string) bool {
