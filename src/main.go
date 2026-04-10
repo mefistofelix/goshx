@@ -491,7 +491,6 @@ func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
 			fmt.Fprintln(app.stderr, "interactive prompt error")
 			return 1
 		}
-		fmt.Fprintln(app.stdout)
 		if prompt_model.eof {
 			return 0
 		}
@@ -814,11 +813,15 @@ func row_col_from_offset(lines []string, offset int) (int, int) {
 }
 
 func (m shell_prompt) is_at_prompt_start() bool {
-	return m.cursor_offset() == 0
+	line_info := m.input.LineInfo()
+	return m.input.Line() == 0 && line_info.RowOffset == 0 && line_info.CharOffset == 0
 }
 
 func (m shell_prompt) is_at_prompt_end() bool {
-	return m.cursor_offset() == rune_len(m.input.Value())
+	line_info := m.input.LineInfo()
+	return m.input.Line() == m.input.LineCount()-1 &&
+		line_info.RowOffset == max_int(line_info.Height-1, 0) &&
+		line_info.CharOffset == line_info.CharWidth
 }
 
 func (m *shell_prompt) history_prev() {
