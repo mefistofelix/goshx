@@ -24,6 +24,7 @@ import (
 	"time"
 
 	urootcore "github.com/u-root/u-root/pkg/core"
+	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -172,6 +173,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["cat"] = builtin_def{name: "cat", usage: "cat [file...]", handler: builtin_cat}
 	app.builtins["cp"] = builtin_def{name: "cp", usage: "cp [-r] source... destination", handler: builtin_cp}
 	app.builtins["find"] = builtin_def{name: "find", usage: "find [path] [-name pattern]", handler: builtin_find}
+	app.builtins["gzip"] = builtin_def{name: "gzip", usage: "gzip [file...]", handler: adapt_core_command(func() urootcore.Command { return urootgzip.New("gzip") })}
 	app.builtins["head"] = builtin_def{name: "head", usage: "head [-n count] [file]", handler: builtin_head}
 	app.builtins["hx"] = builtin_def{name: "hx", usage: "hx get|fetch|extract|shasum ...", handler: builtin_hx}
 	app.builtins["ls"] = builtin_def{name: "ls", usage: "ls [-a] [-l] [path...]", handler: builtin_ls}
@@ -298,6 +300,20 @@ func new_core_base(stdin io.Reader, stdout io.Writer, stderr io.Writer, workingD
 
 func (b builtin_context) resolve_path(path string) string {
 	return b.core_base.ResolvePath(path)
+}
+
+func adapt_core_command(builder func() urootcore.Command) builtin_handler {
+	return func(b builtin_context) int {
+		cmd := builder()
+		cmd.SetIO(b.stdin, b.stdout, b.stderr)
+		cmd.SetWorkingDir(b.working_dir)
+		cmd.SetLookupEnv(b.core_base.LookupEnv)
+		if err := cmd.RunContext(b.ctx, b.args...); err != nil {
+			fmt.Fprintln(b.stderr, err)
+			return 1
+		}
+		return 0
+	}
 }
 
 func builtin_cat(b builtin_context) int {

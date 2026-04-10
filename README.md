@@ -31,6 +31,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `cat`
 - `cp`
 - `find`
+- `gzip`
 - `head`
 - `hx`
 - `ls`
@@ -42,6 +43,8 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `touch`
 
 ## `hx` builtin
+
+The current `gzip` builtin is now wired through the upstream `u-root/pkg/core/gzip` command interface.
 
 The current `hx` builtin is a minimal in-process helper for generic bootstrap workflows.
 

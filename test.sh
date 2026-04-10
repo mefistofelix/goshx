@@ -27,4 +27,6 @@ test_cache/goshx -c "export HELLO_VAR=world; echo \$HELLO_VAR" > test_cache/env.
 grep -F "world" test_cache/env.txt >/dev/null
 test_cache/goshx -c "echo shell-data | base64 | cat" > test_cache/b64.txt
 grep -F "c2hlbGwtZGF0YQo=" test_cache/b64.txt >/dev/null
+test_cache/goshx -c "echo zipme > test_cache/gzip.txt; gzip test_cache/gzip.txt"
+test -f test_cache/gzip.txt.gz
 echo "Tests passed"

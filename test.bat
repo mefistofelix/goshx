@@ -36,4 +36,7 @@ test_cache\goshx.exe -c "echo shell-data | base64 | cat" > test_cache\b64.txt
 if errorlevel 1 exit /b 1
 findstr /c:"c2hlbGwtZGF0YQo=" test_cache\b64.txt >nul
 if errorlevel 1 echo base64 test failed & exit /b 1
+test_cache\goshx.exe -c "echo zipme > test_cache/gzip.txt; gzip test_cache/gzip.txt"
+if errorlevel 1 exit /b 1
+if not exist test_cache\gzip.txt.gz echo gzip test failed & exit /b 1
 echo Tests passed
