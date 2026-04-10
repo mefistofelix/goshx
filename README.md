@@ -10,6 +10,7 @@ The project currently provides a first working vertical slice:
 - `bash`-style command execution through the current `mvdan/sh` development branch
 - interactive mode when started without arguments
 - interactive `bubbletea` prompt with multiline editing, caret paste, current-directory prompt, `Tab` completion for builtin commands and filesystem paths, and filtered history navigation with `PgUp`/`PgDn`
+- interactive history persisted next to the executable under `.goshx/history`, with opt-out via `--no-history`
 - `-c` command execution mode
 - script file execution mode
 - builtin-first command dispatch
@@ -70,6 +71,9 @@ When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that support
 - `Up` and `Down` history browsing when the caret is on the first or last logical input line
 - `PgUp` and `PgDn` history browsing filtered by the current prompt text when the caret is on the first or last logical input line
 - `Esc` to clear the current prompt buffer
+
+Interactive history is loaded from `.goshx/history` relative to the `goshx` binary directory and new commands are appended after execution regardless of success or failure.
+Use `--no-history` to disable history loading and prevent creation of the `.goshx` profile/history directory.
 
 When no real TTY is available, `goshx` keeps using the plain non-interactive line reader fallback.
 

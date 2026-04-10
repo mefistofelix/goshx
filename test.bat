@@ -54,4 +54,16 @@ set /p HX_OUT=<test_cache\hx_out\gzip.txt
 if not "%HX_OUT%"=="zipme" echo hx extract content test failed & exit /b 1
 findstr /c:"gzip.txt" test_cache\hx.txt >nul
 if errorlevel 1 echo hx test failed & exit /b 1
+if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
+(echo echo hist-one& echo missing-history-command& echo.) | test_cache\goshx.exe >nul 2>nul
+if errorlevel 1 exit /b 1
+if not exist test_cache\.goshx\history echo history file test failed & exit /b 1
+findstr /c:"echo hist-one" test_cache\.goshx\history >nul
+if errorlevel 1 echo history append success test failed & exit /b 1
+findstr /c:"missing-history-command" test_cache\.goshx\history >nul
+if errorlevel 1 echo history append failure test failed & exit /b 1
+if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
+(echo echo no-history& echo.) | test_cache\goshx.exe --no-history >nul 2>nul
+if errorlevel 1 exit /b 1
+if exist test_cache\.goshx echo no-history flag test failed & exit /b 1
 echo Tests passed

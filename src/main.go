@@ -33,6 +33,9 @@ type shell_app struct {
 	argv0      string
 	env        []string
 	builtins   map[string]builtin_def
+	history    []string
+	history_on bool
+	history_fn string
 	runner     *interp.Runner
 	stdin      io.Reader
 	stdout     io.Writer
@@ -59,10 +62,11 @@ type builtin_context struct {
 }
 
 type shell_options struct {
-	command     string
-	script_path string
-	script_args []string
-	interactive bool
+	command         string
+	script_path     string
+	script_args     []string
+	interactive     bool
+	disable_history bool
 }
 
 type builtin_handler func(builtin_context) int
@@ -91,7 +95,7 @@ func run_main() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	app, err := new_shell_app()
+	app, err := new_shell_app(opts)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -102,6 +106,10 @@ func run_main() int {
 func parse_cli_args(argv []string) (shell_options, error) {
 	opts := shell_options{}
 	args := argv[1:]
+	for len(args) > 0 && args[0] == "--no-history" {
+		opts.disable_history = true
+		args = args[1:]
+	}
 	if len(args) == 0 {
 		opts.interactive = true
 		return opts, nil
@@ -119,8 +127,12 @@ func parse_cli_args(argv []string) (shell_options, error) {
 	return opts, nil
 }
 
-func new_shell_app() (*shell_app, error) {
+func new_shell_app(opts shell_options) (*shell_app, error) {
 	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	history_file, history, history_on, err := resolve_history_state(!opts.disable_history)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +141,9 @@ func new_shell_app() (*shell_app, error) {
 		argv0:      filepath.Base(os.Args[0]),
 		env:        append([]string{}, os.Environ()...),
 		builtins:   map[string]builtin_def{},
+		history:    history,
+		history_on: history_on,
+		history_fn: history_file,
 		stdin:      os.Stdin,
 		stdout:     os.Stdout,
 		stderr:     os.Stderr,
@@ -216,6 +231,7 @@ func (app *shell_app) run_interactive_plain() int {
 		}
 		line = strings.TrimSpace(line)
 		if line != "" {
+			app.append_history(line)
 			runErr := app.run_command_text(line)
 			if runErr != nil {
 				if status, ok := interp.IsExitStatus(runErr); ok {
@@ -238,9 +254,8 @@ func (app *shell_app) run_interactive_plain() int {
 }
 
 func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
-	history := []string{}
 	for {
-		model := new_shell_prompt(app, history)
+		model := new_shell_prompt(app, app.history)
 		program := tea.NewProgram(model, tea.WithInput(stdin_file), tea.WithOutput(app.stdout))
 		final_model, err := program.Run()
 		if err != nil {
@@ -263,7 +278,7 @@ func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
 		if line == "" {
 			continue
 		}
-		history = append_history_entry(history, prompt_model.submitted)
+		app.append_history(prompt_model.submitted)
 		runErr := app.run_command_text(line)
 		if runErr != nil {
 			if status, ok := interp.IsExitStatus(runErr); ok {
@@ -286,6 +301,74 @@ func append_history_entry(history []string, entry string) []string {
 		return history
 	}
 	return append(history, entry)
+}
+
+func resolve_history_state(enabled bool) (string, []string, bool, error) {
+	if !enabled {
+		return "", nil, false, nil
+	}
+	executable_path, err := os.Executable()
+	if err != nil {
+		return "", nil, false, err
+	}
+	history_file := filepath.Join(filepath.Dir(executable_path), ".goshx", "history")
+	history, err := load_history_file(history_file)
+	if err != nil {
+		return "", nil, false, err
+	}
+	return history_file, history, true, nil
+}
+
+func load_history_file(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+	entries := []string{}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		entry, err := strconv.Unquote(line)
+		if err != nil {
+			entry = line
+		}
+		if strings.TrimSpace(entry) == "" {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func (app *shell_app) append_history(entry string) {
+	if strings.TrimSpace(entry) == "" {
+		return
+	}
+	app.history = append_history_entry(app.history, entry)
+	if !app.history_on || app.history_fn == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(app.history_fn), 0o755); err != nil {
+		fmt.Fprintln(app.stderr, err)
+		return
+	}
+	file, err := os.OpenFile(app.history_fn, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		fmt.Fprintln(app.stderr, err)
+		return
+	}
+	_, write_err := fmt.Fprintln(file, strconv.Quote(entry))
+	close_err := file.Close()
+	if write_err != nil || close_err != nil {
+		fmt.Fprintln(app.stderr, first_error(write_err, close_err))
+	}
 }
 
 func (app *shell_app) prompt() string {
