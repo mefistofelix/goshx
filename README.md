@@ -75,10 +75,11 @@ So generic download and extraction workflows run inside the shell process withou
 When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that supports:
 
 - multiline shell input
+- `Enter` inserts a new line when the shell input is incomplete, including trailing `\` line continuations
 - paste at the current caret position
 - a prompt prefix that shows the current working directory
-- `Up` and `Down` history browsing when the caret is on the first or last logical input line
-- `PgUp` and `PgDn` history browsing filtered by the current prompt text when the caret is on the first or last logical input line
+- `Up` and `Down` history browsing only when the caret is at the absolute start or end of the prompt buffer
+- `PgUp` and `PgDn` filtered history browsing only when the caret is at the absolute start or end of the prompt buffer
 - `Esc` to clear the current prompt buffer
 
 Interactive history is loaded from `.goshx/history` relative to the `goshx` binary directory and new commands are appended after execution regardless of success or failure. The history file keeps exactly one escaped line per command so multiline input and literal backslashes round-trip correctly.

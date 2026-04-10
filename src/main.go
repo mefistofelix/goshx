@@ -656,29 +656,31 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.submitted = m.input.Value()
 				return m, tea.Quit
 			}
+			m.insert_newline()
+			return m, nil
 		case "tab":
 			m.apply_completion()
 			return m, nil
 		case "up":
-			if m.is_at_history_start() {
+			if m.is_at_prompt_start() {
 				m.history_prev()
 				m.recalc_height()
 				return m, nil
 			}
 		case "down":
-			if m.is_at_history_end() {
+			if m.is_at_prompt_end() {
 				m.history_next()
 				m.recalc_height()
 				return m, nil
 			}
 		case "pgup":
-			if m.is_at_history_start() {
+			if m.is_at_prompt_start() {
 				m.filtered_history_prev()
 				m.recalc_height()
 				return m, nil
 			}
 		case "pgdown":
-			if m.is_at_history_end() {
+			if m.is_at_prompt_end() {
 				m.filtered_history_next()
 				m.recalc_height()
 				return m, nil
@@ -731,6 +733,13 @@ func (m *shell_prompt) clear_input() {
 	m.input.CursorEnd()
 	m.history_index = len(m.history)
 	m.history_draft = ""
+	m.reset_filtered_history()
+}
+
+func (m *shell_prompt) insert_newline() {
+	m.input.InsertRune('\n')
+	m.recalc_height()
+	m.history_index = len(m.history)
 	m.reset_filtered_history()
 }
 
@@ -804,12 +813,12 @@ func row_col_from_offset(lines []string, offset int) (int, int) {
 	return last, rune_len(lines[last])
 }
 
-func (m shell_prompt) is_at_history_start() bool {
-	return m.input.Line() == 0
+func (m shell_prompt) is_at_prompt_start() bool {
+	return m.cursor_offset() == 0
 }
 
-func (m shell_prompt) is_at_history_end() bool {
-	return m.input.Line() == m.input.LineCount()-1
+func (m shell_prompt) is_at_prompt_end() bool {
+	return m.cursor_offset() == rune_len(m.input.Value())
 }
 
 func (m *shell_prompt) history_prev() {
