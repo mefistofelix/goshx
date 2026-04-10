@@ -45,6 +45,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `rm`
 - `shasum`
 - `tail`
+- `tar`
 - `touch`
 - `xargs`
 

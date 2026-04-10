@@ -64,6 +64,10 @@ test_cache\goshx.exe -c "shasum test_cache/ln_source.txt" > test_cache\shasum.tx
 if errorlevel 1 exit /b 1
 findstr /c:"test_cache/ln_source.txt" test_cache\shasum.txt >nul
 if errorlevel 1 echo shasum test failed & exit /b 1
+test_cache\goshx.exe -c "cd test_cache; mkdir -p tar_src; echo packed > tar_src/item.txt; tar -cf archive.tar tar_src; mkdir -p tar_out; tar -xf archive.tar tar_out; cat tar_out/tar_src/item.txt" > test_cache\tar.txt
+if errorlevel 1 exit /b 1
+set /p TAR_OUT=<test_cache\tar.txt
+if not "%TAR_OUT%"=="packed" echo tar test failed & exit /b 1
 test_cache\goshx.exe -c "echo one two | xargs -n 1 cmd /c echo" > test_cache\xargs.txt
 if errorlevel 1 exit /b 1
 findstr /c:"one" test_cache\xargs.txt >nul

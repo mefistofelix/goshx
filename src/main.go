@@ -24,6 +24,7 @@ import (
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
 	urootshasum "github.com/u-root/u-root/pkg/core/shasum"
+	uroottar "github.com/u-root/u-root/pkg/core/tar"
 	urootxargs "github.com/u-root/u-root/pkg/core/xargs"
 	"golang.org/x/term"
 	"mvdan.cc/sh/v3/expand"
@@ -215,6 +216,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["rm"] = builtin_def{name: "rm", usage: "rm [-r] [-f] path...", handler: builtin_rm}
 	app.builtins["shasum"] = builtin_def{name: "shasum", usage: "shasum [-a 1|256|512] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootshasum.New() })}
 	app.builtins["tail"] = builtin_def{name: "tail", usage: "tail [-n count] [file]", handler: builtin_tail}
+	app.builtins["tar"] = builtin_def{name: "tar", usage: "tar -c|-x|-t -f file [path]", handler: adapt_core_command(func() urootcore.Command { return uroottar.New() })}
 	app.builtins["touch"] = builtin_def{name: "touch", usage: "touch file...", handler: builtin_touch}
 	app.builtins["xargs"] = builtin_def{name: "xargs", usage: "xargs [options] [command [args...]]", handler: adapt_core_command(func() urootcore.Command { return urootxargs.New() })}
 }

@@ -13,7 +13,7 @@ require (
 
 replace hx => github.com/mefistofelix/hx v1.0.16
 
-replace github.com/u-root/u-root => github.com/mefistofelix/u-root v0.16.1-0.20260410161342-e1fb3ee1dfa2
+replace github.com/u-root/u-root => github.com/mefistofelix/u-root v0.16.1-0.20260410170356-c53ab640e572
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
