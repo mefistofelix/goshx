@@ -20,8 +20,11 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	urootcore "github.com/u-root/u-root/pkg/core"
+	urootchmod "github.com/u-root/u-root/pkg/core/chmod"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
+	urootshasum "github.com/u-root/u-root/pkg/core/shasum"
+	urootxargs "github.com/u-root/u-root/pkg/core/xargs"
 	"golang.org/x/term"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
@@ -198,6 +201,7 @@ func (app *shell_app) init_runner(params []string, interactive bool) error {
 func (app *shell_app) register_builtins() {
 	app.builtins["base64"] = builtin_def{name: "base64", usage: "base64 [-d] [file]", handler: builtin_base64}
 	app.builtins["cat"] = builtin_def{name: "cat", usage: "cat [file...]", handler: builtin_cat}
+	app.builtins["chmod"] = builtin_def{name: "chmod", usage: "chmod [-R] mode file...", handler: adapt_core_command(func() urootcore.Command { return urootchmod.New() })}
 	app.builtins["cp"] = builtin_def{name: "cp", usage: "cp [-r] source... destination", handler: builtin_cp}
 	app.builtins["find"] = builtin_def{name: "find", usage: "find [path] [-name pattern]", handler: builtin_find}
 	app.builtins["gzip"] = builtin_def{name: "gzip", usage: "gzip [file...]", handler: adapt_core_command(func() urootcore.Command { return urootgzip.New("gzip") })}
@@ -209,8 +213,10 @@ func (app *shell_app) register_builtins() {
 	app.builtins["mktemp"] = builtin_def{name: "mktemp", usage: "mktemp [-d] [template]", handler: builtin_mktemp}
 	app.builtins["mv"] = builtin_def{name: "mv", usage: "mv source... destination", handler: builtin_mv}
 	app.builtins["rm"] = builtin_def{name: "rm", usage: "rm [-r] [-f] path...", handler: builtin_rm}
+	app.builtins["shasum"] = builtin_def{name: "shasum", usage: "shasum [-a 1|256|512] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootshasum.New() })}
 	app.builtins["tail"] = builtin_def{name: "tail", usage: "tail [-n count] [file]", handler: builtin_tail}
 	app.builtins["touch"] = builtin_def{name: "touch", usage: "touch file...", handler: builtin_touch}
+	app.builtins["xargs"] = builtin_def{name: "xargs", usage: "xargs [options] [command [args...]]", handler: adapt_core_command(func() urootcore.Command { return urootxargs.New() })}
 }
 
 func (app *shell_app) run_interactive() int {

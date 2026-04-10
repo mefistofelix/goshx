@@ -31,6 +31,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 
 - `base64`
 - `cat`
+- `chmod`
 - `cp`
 - `find`
 - `gzip`
@@ -42,8 +43,10 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `mktemp`
 - `mv`
 - `rm`
+- `shasum`
 - `tail`
 - `touch`
+- `xargs`
 
 ## `hx` builtin
 

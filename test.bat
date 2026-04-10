@@ -36,6 +36,12 @@ test_cache\goshx.exe -c "echo shell-data | base64 | cat" > test_cache\b64.txt
 if errorlevel 1 exit /b 1
 findstr /c:"c2hlbGwtZGF0YQo=" test_cache\b64.txt >nul
 if errorlevel 1 echo base64 test failed & exit /b 1
+test_cache\goshx.exe -c "echo permtest > test_cache/chmod.txt"
+if errorlevel 1 exit /b 1
+test_cache\goshx.exe -c "chmod 644 test_cache/chmod.txt; cat test_cache/chmod.txt" > test_cache\chmod_out.txt
+if errorlevel 1 exit /b 1
+set /p CHMOD_OUT=<test_cache\chmod_out.txt
+if not "%CHMOD_OUT%"=="permtest" echo chmod test failed & exit /b 1
 test_cache\goshx.exe -c "echo linkme > test_cache/ln_source.txt; ln test_cache/ln_source.txt test_cache/ln_copy.txt; cat test_cache/ln_copy.txt" > test_cache\ln.txt
 if errorlevel 1 exit /b 1
 set /p LN_OUT=<test_cache\ln.txt
@@ -54,6 +60,16 @@ set /p HX_OUT=<test_cache\hx_out\gzip.txt
 if not "%HX_OUT%"=="zipme" echo hx extract content test failed & exit /b 1
 findstr /c:"gzip.txt" test_cache\hx.txt >nul
 if errorlevel 1 echo hx test failed & exit /b 1
+test_cache\goshx.exe -c "shasum test_cache/ln_source.txt" > test_cache\shasum.txt
+if errorlevel 1 exit /b 1
+findstr /c:"test_cache/ln_source.txt" test_cache\shasum.txt >nul
+if errorlevel 1 echo shasum test failed & exit /b 1
+test_cache\goshx.exe -c "echo one two | xargs -n 1 cmd /c echo" > test_cache\xargs.txt
+if errorlevel 1 exit /b 1
+findstr /c:"one" test_cache\xargs.txt >nul
+if errorlevel 1 echo xargs first item test failed & exit /b 1
+findstr /c:"two" test_cache\xargs.txt >nul
+if errorlevel 1 echo xargs second item test failed & exit /b 1
 if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
 (echo echo hist-one& echo missing-history-command& echo.) | test_cache\goshx.exe >nul 2>nul
 if errorlevel 1 exit /b 1
