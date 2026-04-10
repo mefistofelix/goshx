@@ -88,12 +88,14 @@ type shell_options struct {
 	interactive     bool
 	disable_history bool
 	json_mode       bool
-	json_compact    bool
+	json_payload    string
+	json_oneline    bool
 }
 
 // json_request is the input schema for --json mode.
 type json_request struct {
 	Command     string            `json:"command"`
+	Args        []string          `json:"args"`
 	Cwd         string            `json:"cwd"`
 	Env         map[string]string `json:"env"`
 	Stdin       string            `json:"stdin"`
@@ -143,7 +145,7 @@ func run_main() int {
 		return 1
 	}
 	if opts.json_mode {
-		return app.run_json_mode(opts.json_compact)
+		return app.run_json_mode(opts)
 	}
 	return app.run(opts)
 }
@@ -153,23 +155,35 @@ func parse_cli_args(argv []string) (shell_options, error) {
 	args := argv[1:]
 	// consume leading flags
 	for len(args) > 0 {
-		switch args[0] {
-		case "--no-history":
-			opts.disable_history = true
-		case "--json":
+		switch {
+		case strings.HasPrefix(args[0], "--json="):
 			opts.json_mode = true
-		case "--compact":
-			opts.json_compact = true
+			opts.json_payload = strings.TrimPrefix(args[0], "--json=")
+		case args[0] == "--json":
+			opts.json_mode = true
+			if len(args) > 1 && !is_json_cli_flag(args[1]) && opts.json_payload == "" {
+				opts.json_payload = args[1]
+				args = args[1:]
+			}
+		case args[0] == "--no-history":
+			opts.disable_history = true
+		case args[0] == "--json-out-oneline":
+			opts.json_oneline = true
+		case args[0] == "--compact":
+			return opts, errors.New("--compact has been renamed to --json-out-oneline")
 		default:
 			goto done
 		}
 		args = args[1:]
 	}
 done:
-	if opts.json_compact && !opts.json_mode {
-		return opts, errors.New("--compact requires --json")
+	if opts.json_oneline && !opts.json_mode {
+		return opts, errors.New("--json-out-oneline requires --json")
 	}
 	if opts.json_mode {
+		if len(args) > 0 {
+			return opts, errors.New("unexpected positional arguments in --json mode")
+		}
 		return opts, nil
 	}
 	if len(args) == 0 {
@@ -194,7 +208,7 @@ func new_shell_app(opts shell_options) (*shell_app, error) {
 	if err != nil {
 		return nil, err
 	}
-	history_file, history, history_on, err := resolve_history_state(!opts.disable_history && !opts.json_mode)
+	history_file, history, history_on, err := resolve_history_state(!opts.disable_history)
 	if err != nil {
 		return nil, err
 	}
@@ -241,10 +255,10 @@ func (app *shell_app) run_with_error(err error) int {
 	return 1
 }
 
-func (app *shell_app) run_json_mode(compact bool) int {
+func (app *shell_app) run_json_mode(opts shell_options) int {
 	write_resp := func(resp json_response) int {
 		var out []byte
-		if compact {
+		if opts.json_oneline {
 			out, _ = json.Marshal(resp)
 		} else {
 			out, _ = json.MarshalIndent(resp, "", "  ")
@@ -253,13 +267,13 @@ func (app *shell_app) run_json_mode(compact bool) int {
 		return resp.ExitCode
 	}
 
-	data, err := io.ReadAll(os.Stdin)
+	req, err := read_json_request(opts)
 	if err != nil {
-		return write_resp(json_response{ExitCode: 1, Error: "reading request: " + err.Error()})
-	}
-	var req json_request
-	if err := json.Unmarshal(data, &req); err != nil {
 		return write_resp(json_response{ExitCode: 1, Error: "parsing request: " + err.Error()})
+	}
+	command_text, err := json_request_command(req)
+	if err != nil {
+		return write_resp(json_response{ExitCode: 1, Error: err.Error()})
 	}
 
 	// apply cwd and env overrides
@@ -296,7 +310,8 @@ func (app *shell_app) run_json_mode(compact bool) int {
 		defer cancel()
 	}
 
-	file, parse_err := parse_shell_program("-c", req.Command)
+	app.append_history(command_text)
+	file, parse_err := parse_shell_program("-c", command_text)
 	if parse_err != nil {
 		return write_resp(json_response{ExitCode: 1, Error: parse_err.Error()})
 	}
@@ -320,6 +335,47 @@ func (app *shell_app) run_json_mode(compact bool) int {
 		}
 	}
 	return write_resp(resp)
+}
+
+func is_json_cli_flag(arg string) bool {
+	return arg == "--no-history" || arg == "--json-out-oneline"
+}
+
+func read_json_request(opts shell_options) (json_request, error) {
+	if opts.json_payload != "" {
+		req := json_request{}
+		if err := json.Unmarshal([]byte(opts.json_payload), &req); err != nil {
+			return req, err
+		}
+		return req, nil
+	}
+	req := json_request{}
+	decoder := json.NewDecoder(os.Stdin)
+	if err := decoder.Decode(&req); err != nil {
+		return req, err
+	}
+	return req, nil
+}
+
+func json_request_command(req json_request) (string, error) {
+	if strings.TrimSpace(req.Command) != "" && len(req.Args) > 0 {
+		return "", errors.New(`json request must use either "command" or "args", not both`)
+	}
+	if len(req.Args) > 0 {
+		parts := make([]string, len(req.Args))
+		for i, arg := range req.Args {
+			quoted, err := syntax.Quote(arg, syntax.LangBash)
+			if err != nil {
+				return "", err
+			}
+			parts[i] = quoted
+		}
+		return strings.Join(parts, " "), nil
+	}
+	if strings.TrimSpace(req.Command) == "" {
+		return "", errors.New(`json request requires "command" or "args"`)
+	}
+	return req.Command, nil
 }
 
 func (app *shell_app) init_runner(params []string, interactive bool) error {

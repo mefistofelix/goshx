@@ -119,7 +119,7 @@ findstr /c:"jsontest" test_cache\json_pretty.txt >nul
 if errorlevel 1 echo json mode stdout test failed & exit /b 1
 findstr /c:"duration_ms" test_cache\json_pretty.txt >nul
 if errorlevel 1 echo json mode duration_ms field test failed & exit /b 1
-echo {"command":"echo compact"} | test_cache\goshx.exe --json --compact > test_cache\json_compact.txt
+echo {"command":"echo oneline"} | test_cache\goshx.exe --json --json-out-oneline > test_cache\json_compact.txt
 if errorlevel 1 exit /b 1
 findstr /c:"exit_code" test_cache\json_compact.txt >nul
 if errorlevel 1 echo json compact mode test failed & exit /b 1
@@ -131,28 +131,46 @@ echo {"command":"exit 7"} | test_cache\goshx.exe --json > test_cache\json_exitco
 if not errorlevel 7 exit /b 1
 findstr /c:"\"exit_code\": 7" test_cache\json_exitcode.txt >nul
 if errorlevel 1 echo json exit_code value test failed & exit /b 1
-echo {"command":"pwd","cwd":"%CD:\=/%/test_cache"} | test_cache\goshx.exe --json --compact > test_cache\json_cwd.txt
+echo {"command":"pwd","cwd":"%CD:\=/%/test_cache"} | test_cache\goshx.exe --json --json-out-oneline > test_cache\json_cwd.txt
 if errorlevel 1 exit /b 1
 findstr /c:"test_cache" test_cache\json_cwd.txt >nul
 if errorlevel 1 echo json cwd override test failed & exit /b 1
-echo {"command":"echo $JSON_ENV_VAR","env":{"JSON_ENV_VAR":"json-ok"}} | test_cache\goshx.exe --json --compact > test_cache\json_env.txt
+echo {"command":"echo $JSON_ENV_VAR","env":{"JSON_ENV_VAR":"json-ok"}} | test_cache\goshx.exe --json --json-out-oneline > test_cache\json_env.txt
 if errorlevel 1 exit /b 1
 findstr /c:"json-ok" test_cache\json_env.txt >nul
 if errorlevel 1 echo json env override test failed & exit /b 1
-echo {"command":"cat","stdin":"json-stdin"} | test_cache\goshx.exe --json --compact > test_cache\json_stdin.txt
+echo {"command":"cat","stdin":"json-stdin"} | test_cache\goshx.exe --json --json-out-oneline > test_cache\json_stdin.txt
 if errorlevel 1 exit /b 1
 findstr /c:"json-stdin" test_cache\json_stdin.txt >nul
 if errorlevel 1 echo json stdin test failed & exit /b 1
-echo {"command":"echo out; missing-json-cmd","merge_output":true} | test_cache\goshx.exe --json --compact > test_cache\json_merge.txt
+echo {"args":["echo","json-args"]} | test_cache\goshx.exe --json --json-out-oneline > test_cache\json_args.txt
+if errorlevel 1 exit /b 1
+findstr /c:"json-args" test_cache\json_args.txt >nul
+if errorlevel 1 echo json args array test failed & exit /b 1
+if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
+echo {"command":"echo json-history"} | test_cache\goshx.exe --json >nul
+if errorlevel 1 exit /b 1
+if not exist test_cache\.goshx\history echo json history file test failed & exit /b 1
+findstr /c:"echo json-history" test_cache\.goshx\history >nul
+if errorlevel 1 echo json history append test failed & exit /b 1
+if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
+echo {"command":"echo no-json-history"} | test_cache\goshx.exe --json --no-history >nul
+if errorlevel 1 exit /b 1
+if exist test_cache\.goshx echo json no-history flag test failed & exit /b 1
+echo {"command":"echo out; missing-json-cmd","merge_output":true} | test_cache\goshx.exe --json --json-out-oneline > test_cache\json_merge.txt
 if not errorlevel 127 exit /b 1
 findstr /c:"out" test_cache\json_merge.txt >nul
 if errorlevel 1 echo json merge_output stdout test failed & exit /b 1
 findstr /c:"missing-json-cmd" test_cache\json_merge.txt >nul
 if errorlevel 1 echo json merge_output stderr test failed & exit /b 1
-test_cache\goshx.exe --compact > test_cache\json_badflag.txt 2>&1
+test_cache\goshx.exe --json-out-oneline > test_cache\json_badflag.txt 2>&1
 if not errorlevel 2 exit /b 1
-findstr /c:"--compact requires --json" test_cache\json_badflag.txt >nul
-if errorlevel 1 echo json compact flag validation test failed & exit /b 1
+findstr /c:"--json-out-oneline requires --json" test_cache\json_badflag.txt >nul
+if errorlevel 1 echo json oneline flag validation test failed & exit /b 1
+test_cache\goshx.exe --compact > test_cache\json_renamed_flag.txt 2>&1
+if not errorlevel 2 exit /b 1
+findstr /c:"--compact has been renamed to --json-out-oneline" test_cache\json_renamed_flag.txt >nul
+if errorlevel 1 echo json renamed compact flag validation test failed & exit /b 1
 test_cache\goshx.exe -c "printf 'apple\nbanana\ncherry\n' | grep an" > test_cache\grep.txt
 if errorlevel 1 exit /b 1
 findstr /c:"banana" test_cache\grep.txt >nul

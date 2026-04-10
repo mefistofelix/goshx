@@ -94,15 +94,24 @@ When no real TTY is available, `goshx` keeps using the plain non-interactive lin
 
 ## JSON mode
 
-`goshx --json` reads a JSON request from stdin, executes the command in-process, and writes a JSON response to stdout.
+`goshx --json` executes a JSON request in-process and writes a JSON response to stdout.
 This mode is designed for programmatic use by AI agents and automation pipelines.
-It is non-interactive and does not load or persist shell history/profile state.
+By default it uses the same history/profile handling as the normal shell mode; use `--no-history` to disable that.
+
+The request can be supplied in either of these forms:
+
+- `goshx --json '{"command":"echo hello"}'`
+- `echo {"command":"echo hello"} | goshx --json`
+
+When reading from `stdin`, `goshx` decodes a single JSON value instead of waiting to read the entire stream.
+On Windows, inline JSON arguments depend on shell-specific quoting rules; piping the request to `stdin` is the most portable form.
 
 Request schema:
 
 ```json
 {
   "command":      "echo hello",
+  "args":         ["echo", "hello"],
   "cwd":          "/optional/working/dir",
   "env":          {"KEY": "VALUE"},
   "stdin":        "optional stdin data",
@@ -110,6 +119,8 @@ Request schema:
   "timeout_ms":   0
 }
 ```
+
+Use either `command` or `args`. When `args` is present, each element is shell-quoted and executed as a single command invocation.
 
 Response schema:
 
@@ -123,7 +134,7 @@ Response schema:
 }
 ```
 
-Output is pretty-printed by default. Use `--compact` together with `--json` to get single-line JSON.
+Output is pretty-printed by default. Use `--json-out-oneline` together with `--json` to get a single-line JSON response.
 The process exits with the same code as the executed command.
 
 ## Architecture
