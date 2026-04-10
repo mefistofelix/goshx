@@ -7,7 +7,7 @@ require (
 	mvdan.cc/sh/v3 v3.13.2-0.20260408142357-88fac5cb7aed
 )
 
-replace github.com/u-root/u-root => github.com/mefistofelix/u-root v0.16.1-0.20260408164047-3769fe32a2d8
+replace github.com/u-root/u-root => github.com/mefistofelix/u-root v0.16.1-0.20260410143407-f604bee39586
 
 require (
 	github.com/klauspost/compress v1.18.0 // indirect

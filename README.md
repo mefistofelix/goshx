@@ -34,6 +34,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `gzip`
 - `head`
 - `hx`
+- `ln`
 - `ls`
 - `mkdir`
 - `mktemp`
@@ -47,6 +48,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 The current `gzip` builtin is now wired through the upstream `u-root/pkg/core/gzip` command interface.
 
 The current `hx` builtin is a minimal in-process helper for generic bootstrap workflows.
+The current `ln` builtin is wired through the forked `u-root/pkg/core/ln` command interface.
 
 Supported subcommands:
 

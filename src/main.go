@@ -25,6 +25,7 @@ import (
 
 	urootcore "github.com/u-root/u-root/pkg/core"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
+	urootln "github.com/u-root/u-root/pkg/core/ln"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -176,6 +177,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["gzip"] = builtin_def{name: "gzip", usage: "gzip [file...]", handler: adapt_core_command(func() urootcore.Command { return urootgzip.New("gzip") })}
 	app.builtins["head"] = builtin_def{name: "head", usage: "head [-n count] [file]", handler: builtin_head}
 	app.builtins["hx"] = builtin_def{name: "hx", usage: "hx get|fetch|extract|shasum ...", handler: builtin_hx}
+	app.builtins["ln"] = builtin_def{name: "ln", usage: "ln [-svfTiLPr] target... link", handler: adapt_core_command(func() urootcore.Command { return urootln.New() })}
 	app.builtins["ls"] = builtin_def{name: "ls", usage: "ls [-a] [-l] [path...]", handler: builtin_ls}
 	app.builtins["mkdir"] = builtin_def{name: "mkdir", usage: "mkdir [-p] path...", handler: builtin_mkdir}
 	app.builtins["mktemp"] = builtin_def{name: "mktemp", usage: "mktemp [-d] [template]", handler: builtin_mktemp}
