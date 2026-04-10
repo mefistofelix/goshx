@@ -43,8 +43,11 @@ if not "%LN_OUT%"=="linkme" echo ln test failed & exit /b 1
 test_cache\goshx.exe -c "echo zipme > test_cache/gzip.txt; gzip test_cache/gzip.txt"
 if errorlevel 1 exit /b 1
 if not exist test_cache\gzip.txt.gz echo gzip test failed & exit /b 1
-test_cache\goshx.exe -c "echo hx-data > test_cache/hx_data.txt; hx shasum test_cache/hx_data.txt" > test_cache\hx.txt
+test_cache\goshx.exe -c "mkdir -p test_cache/hx_out; hx test_cache/gzip.txt.gz test_cache/hx_out" > test_cache\hx.txt
 if errorlevel 1 exit /b 1
-findstr /c:"hx_data.txt" test_cache\hx.txt >nul
+if not exist test_cache\hx_out\gzip.txt echo hx extract test failed & exit /b 1
+set /p HX_OUT=<test_cache\hx_out\gzip.txt
+if not "%HX_OUT%"=="zipme" echo hx extract content test failed & exit /b 1
+findstr /c:"gzip.txt" test_cache\hx.txt >nul
 if errorlevel 1 echo hx test failed & exit /b 1
 echo Tests passed

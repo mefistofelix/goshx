@@ -31,6 +31,8 @@ test_cache/goshx -c "echo linkme > test_cache/ln_source.txt; ln test_cache/ln_so
 grep -F "linkme" test_cache/ln.txt >/dev/null
 test_cache/goshx -c "echo zipme > test_cache/gzip.txt; gzip test_cache/gzip.txt"
 test -f test_cache/gzip.txt.gz
-test_cache/goshx -c "echo hx-data > test_cache/hx_data.txt; hx shasum test_cache/hx_data.txt" > test_cache/hx.txt
-grep -F "hx_data.txt" test_cache/hx.txt >/dev/null
+test_cache/goshx -c "mkdir -p test_cache/hx_out; hx test_cache/gzip.txt.gz test_cache/hx_out" > test_cache/hx.txt
+test -f test_cache/hx_out/gzip.txt
+grep -F "zipme" test_cache/hx_out/gzip.txt >/dev/null
+grep -F "gzip.txt" test_cache/hx.txt >/dev/null
 echo "Tests passed"

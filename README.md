@@ -46,24 +46,16 @@ Integrated in-process builtins currently implemented by `goshx`:
 ## `hx` builtin
 
 The current `gzip` builtin is now wired through the upstream `u-root/pkg/core/gzip` command interface.
-
-The current `hx` builtin is a minimal in-process helper for generic bootstrap workflows.
 The current `ln` builtin is wired through the forked `u-root/pkg/core/ln` command interface.
+The current `hx` builtin now embeds the real [`hx`](https://github.com/mefistofelix/hx) runtime in-process instead of using the older `goshx`-local helper implementation.
 
-Supported subcommands:
+This means `goshx` now exposes the same `hx` CLI surface as the upstream project:
 
-- `hx get <url> [output]`
-- `hx fetch <url> [output]`
-- `hx extract <archive> [destination]`
-- `hx shasum [-a 1|256|512] <file>`
+```text
+hx [flags] <source> [dest]
+```
 
-Supported extraction formats:
-
-- `.zip`
-- `.tar`
-- `.tar.gz`
-- `.tgz`
-- `.gz`
+So generic download and extraction workflows run inside the shell process without spawning an external `hx` executable.
 
 ## Build
 
