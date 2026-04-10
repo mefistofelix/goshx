@@ -176,6 +176,8 @@ github.com/mattn/go-localereader v0.0.1 h1:ygSAOl7ZXTx4RdPYinUpg6W99U8jWvWi9Ye2J
 github.com/mattn/go-localereader v0.0.1/go.mod h1:8fBrzywKY7BI3czFoHkuzRoWE9C+EiG4R1k4Cjx5p88=
 github.com/mattn/go-runewidth v0.0.19 h1:v++JhqYnZuu5jSKrk9RbgF5v4CGUjqRfBm05byFGLdw=
 github.com/mattn/go-runewidth v0.0.19/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
+github.com/mefistofelix/gosed/sed v0.0.0-20260410172536-08c1d9e2cb3f h1:5e0DZ6iYh/5632n07n7yg5ufcXcR/k7qnfYZK1K9as0=
+github.com/mefistofelix/gosed/sed v0.0.0-20260410172536-08c1d9e2cb3f/go.mod h1:DKiNcNNpqB4iWUG6h4UmUuN7UNeWqzY+F0Oq1Vuelng=
 github.com/mefistofelix/hx v1.0.16 h1:hDwU4XHEvHADvST4FxJkTUULvjhaFid/xg5RO6uzqnA=
 github.com/mefistofelix/hx v1.0.16/go.mod h1:njPZPu1epGgvLhndRpA7TP6K+1oH16Juvf3UHLJdzWA=
 github.com/mefistofelix/u-root v0.16.1-0.20260410171006-2bba794a13db h1:fEie9ZFQdQdiWA6tKnab5a3s5UVWDnFsFTQxgkCKt5E=

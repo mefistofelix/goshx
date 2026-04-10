@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	gosedsed "github.com/mefistofelix/gosed/sed"
 	hxlib "hx/src/hx"
 	"io"
 	"io/fs"
@@ -25,8 +26,8 @@ import (
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
 	urootshasum "github.com/u-root/u-root/pkg/core/shasum"
-	uroottar "github.com/u-root/u-root/pkg/core/tar"
 	uroottail "github.com/u-root/u-root/pkg/core/tail"
+	uroottar "github.com/u-root/u-root/pkg/core/tar"
 	urootwc "github.com/u-root/u-root/pkg/core/wc"
 	urootwget "github.com/u-root/u-root/pkg/core/wget"
 	urootxargs "github.com/u-root/u-root/pkg/core/xargs"
@@ -218,6 +219,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["mktemp"] = builtin_def{name: "mktemp", usage: "mktemp [-d] [template]", handler: builtin_mktemp}
 	app.builtins["mv"] = builtin_def{name: "mv", usage: "mv source... destination", handler: builtin_mv}
 	app.builtins["rm"] = builtin_def{name: "rm", usage: "rm [-r] [-f] path...", handler: builtin_rm}
+	app.builtins["sed"] = builtin_def{name: "sed", usage: "sed [options] [script] [file...]", handler: builtin_sed}
 	app.builtins["shasum"] = builtin_def{name: "shasum", usage: "shasum [-a 1|256|512] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootshasum.New() })}
 	app.builtins["tail"] = builtin_def{name: "tail", usage: "tail [-n count] [file]", handler: adapt_core_command(func() urootcore.Command { return uroottail.New() })}
 	app.builtins["tar"] = builtin_def{name: "tar", usage: "tar -c|-x|-t -f file [path]", handler: adapt_core_command(func() urootcore.Command { return uroottar.New() })}
@@ -1414,6 +1416,18 @@ func builtin_base64(b builtin_context) int {
 	}
 	fmt.Fprintln(b.stdout)
 	return 0
+}
+
+func builtin_sed(b builtin_context) int {
+	err := gosedsed.Run(b.args, b.stdin, b.stdout, b.stderr)
+	if err == nil {
+		return 0
+	}
+	if exitErr, ok := err.(gosedsed.ExitError); ok {
+		return exitErr.Code
+	}
+	fmt.Fprintln(b.stderr, err)
+	return 1
 }
 
 func builtin_hx(b builtin_context) int {

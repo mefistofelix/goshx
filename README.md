@@ -43,6 +43,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `mktemp`
 - `mv`
 - `rm`
+- `sed`
 - `shasum`
 - `tail`
 - `tar`

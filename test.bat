@@ -68,6 +68,10 @@ test_cache\goshx.exe -c "shasum test_cache/ln_source.txt" > test_cache\shasum.tx
 if errorlevel 1 exit /b 1
 findstr /c:"test_cache/ln_source.txt" test_cache\shasum.txt >nul
 if errorlevel 1 echo shasum test failed & exit /b 1
+test_cache\goshx.exe -c "echo alpha beta > test_cache/sed.txt; sed 's/beta/gamma/' test_cache/sed.txt" > test_cache\sed_out.txt
+if errorlevel 1 exit /b 1
+findstr /c:"alpha gamma" test_cache\sed_out.txt >nul
+if errorlevel 1 echo sed test failed & exit /b 1
 test_cache\goshx.exe -c "echo line1 > test_cache/tail.txt; echo line2 >> test_cache/tail.txt; echo line3 >> test_cache/tail.txt; tail -n 2 test_cache/tail.txt" > test_cache\tail_out.txt
 if errorlevel 1 exit /b 1
 findstr /c:"line2" test_cache\tail_out.txt >nul

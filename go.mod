@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/mefistofelix/gosed/sed v0.0.0-20260410172536-08c1d9e2cb3f
 	github.com/u-root/u-root v0.16.1-0.20260408164047-3769fe32a2d8
 	golang.org/x/term v0.41.0
 	hx v1.0.16
