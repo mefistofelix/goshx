@@ -3,7 +3,9 @@ module github.com/mefistofelix/goshx
 go 1.26.2
 
 require (
+	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/u-root/u-root v0.16.1-0.20260408164047-3769fe32a2d8
+	golang.org/x/term v0.41.0
 	hx v1.0.16
 	mvdan.cc/sh/v3 v3.13.2-0.20260408142357-88fac5cb7aed
 )
@@ -58,7 +60,6 @@ require (
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

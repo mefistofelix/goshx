@@ -12,13 +12,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/chzyer/readline"
 	urootcore "github.com/u-root/u-root/pkg/core"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
+	"golang.org/x/term"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -181,6 +184,13 @@ func (app *shell_app) register_builtins() {
 }
 
 func (app *shell_app) run_interactive() int {
+	if stdin_file, ok := app.stdin.(*os.File); ok && term.IsTerminal(int(stdin_file.Fd())) {
+		return app.run_interactive_readline(stdin_file)
+	}
+	return app.run_interactive_plain()
+}
+
+func (app *shell_app) run_interactive_plain() int {
 	reader := bufio.NewReader(app.stdin)
 	for {
 		fmt.Fprint(app.stdout, app.prompt())
@@ -212,8 +222,232 @@ func (app *shell_app) run_interactive() int {
 	}
 }
 
+func (app *shell_app) run_interactive_readline(stdin_file *os.File) int {
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          app.prompt(),
+		AutoComplete:    app,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "exit",
+		Stdin:           stdin_file,
+		Stdout:          app.stdout,
+		Stderr:          app.stderr,
+	})
+	if err != nil {
+		fmt.Fprintln(app.stderr, err)
+		return app.run_interactive_plain()
+	}
+	defer rl.Close()
+	for {
+		line, err := rl.Readline()
+		if errors.Is(err, readline.ErrInterrupt) {
+			if line == "" {
+				fmt.Fprintln(app.stdout)
+				continue
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			fmt.Fprintln(app.stdout)
+			return 0
+		}
+		if err != nil {
+			fmt.Fprintln(app.stderr, err)
+			return 1
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		runErr := app.run_command_text(line)
+		if runErr != nil {
+			if status, ok := interp.IsExitStatus(runErr); ok {
+				if app.runner.Exited() {
+					return int(status)
+				}
+				fmt.Fprintf(app.stderr, "exit status %d\n", status)
+			} else {
+				fmt.Fprintln(app.stderr, runErr)
+			}
+		}
+		if app.runner.Exited() {
+			return 0
+		}
+	}
+}
+
 func (app *shell_app) prompt() string {
 	return "goshx$ "
+}
+
+func (app *shell_app) Do(line []rune, pos int) ([][]rune, int) {
+	if pos < 0 || pos > len(line) {
+		pos = len(line)
+	}
+	segment_start := completion_segment_start(line[:pos])
+	token_start := completion_token_start(line[segment_start:pos]) + segment_start
+	token := string(line[token_start:pos])
+	arg_index := completion_arg_index(line[segment_start:pos], token_start-segment_start)
+	suggestions := []string{}
+	if should_complete_paths(token, arg_index) {
+		suggestions = app.complete_path_candidates(token)
+	} else {
+		suggestions = app.complete_command_candidates(token)
+	}
+	if len(suggestions) == 0 {
+		return nil, 0
+	}
+	out := make([][]rune, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		if !strings.HasPrefix(strings.ToLower(suggestion), strings.ToLower(token)) {
+			continue
+		}
+		out = append(out, []rune(suggestion[len(token):]))
+	}
+	return out, len(token)
+}
+
+func completion_segment_start(line []rune) int {
+	last := 0
+	for i, r := range line {
+		switch r {
+		case ';', '|', '&', '(', ')':
+			last = i + 1
+		}
+	}
+	return last
+}
+
+func completion_token_start(line []rune) int {
+	start := len(line)
+	for start > 0 {
+		r := line[start-1]
+		if unicode_is_completion_separator(r) {
+			break
+		}
+		start--
+	}
+	return start
+}
+
+func completion_arg_index(line []rune, token_start int) int {
+	args := 0
+	in_token := false
+	for i, r := range line[:token_start] {
+		if unicode_is_completion_separator(r) {
+			if in_token {
+				args++
+				in_token = false
+			}
+			continue
+		}
+		if !in_token {
+			in_token = true
+		}
+		if i == token_start-1 && in_token {
+			args++
+		}
+	}
+	return args
+}
+
+func unicode_is_completion_separator(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r', ';', '|', '&', '(', ')':
+		return true
+	default:
+		return false
+	}
+}
+
+func should_complete_paths(token string, arg_index int) bool {
+	if token == "" {
+		return arg_index > 0
+	}
+	return arg_index > 0 ||
+		strings.HasPrefix(token, ".") ||
+		strings.HasPrefix(token, "~") ||
+		strings.Contains(token, "/") ||
+		strings.Contains(token, "\\") ||
+		filepath.IsAbs(token)
+}
+
+func (app *shell_app) complete_command_candidates(token string) []string {
+	seen := map[string]bool{}
+	candidates := make([]string, 0, len(app.builtins)+16)
+	for _, name := range shell_builtin_names() {
+		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(token)) && !seen[name] {
+			seen[name] = true
+			candidates = append(candidates, name)
+		}
+	}
+	for name := range app.builtins {
+		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(token)) && !seen[name] {
+			seen[name] = true
+			candidates = append(candidates, name)
+		}
+	}
+	sort.Strings(candidates)
+	return candidates
+}
+
+func shell_builtin_names() []string {
+	return []string{
+		"cd",
+		"pwd",
+		"exit",
+		"export",
+		"unset",
+		"source",
+		"builtin",
+		"command",
+		"echo",
+		"printf",
+		"test",
+		"true",
+		"false",
+		"complete",
+		"compgen",
+		"compopt",
+	}
+}
+
+func (app *shell_app) complete_path_candidates(token string) []string {
+	normalized := strings.TrimPrefix(token, "~")
+	search_dir := app.cwd
+	display_dir := ""
+	prefix := normalized
+	if last_sep := strings.LastIndexAny(normalized, `/\`); last_sep >= 0 {
+		display_dir = normalized[:last_sep+1]
+		prefix = normalized[last_sep+1:]
+		search_dir = filepath.Join(app.cwd, filepath.FromSlash(strings.ReplaceAll(display_dir, "\\", "/")))
+	}
+	if filepath.IsAbs(normalized) {
+		search_dir = filepath.Dir(normalized)
+		display_dir = filepath.Dir(normalized)
+		prefix = filepath.Base(normalized)
+		if display_dir == "." {
+			display_dir = ""
+		} else {
+			display_dir += string(filepath.Separator)
+		}
+	}
+	entries, err := os.ReadDir(search_dir)
+	if err != nil {
+		return nil
+	}
+	candidates := []string{}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+			continue
+		}
+		candidate := display_dir + name
+		if entry.IsDir() {
+			candidate += string(filepath.Separator)
+		}
+		candidates = append(candidates, filepath.ToSlash(candidate))
+	}
+	sort.Strings(candidates)
+	return candidates
 }
 
 func (app *shell_app) run_command_text(command string) error {
