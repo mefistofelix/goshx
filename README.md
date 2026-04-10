@@ -76,7 +76,7 @@ When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that support
 
 - multiline shell input
 - `Enter` inserts a new line when the shell input is incomplete, including trailing `\` line continuations
-- `Tab` cycles through available completions for the current token and leaves the caret at the end of the shown completion
+- `Tab` cycles through available completions for the current token, and only auto-advances when there is a single completion candidate
 - paste at the current caret position
 - `Home` moves the caret to the start of the full prompt buffer
 - a prompt prefix that shows the current working directory

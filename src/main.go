@@ -719,15 +719,15 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.reset_completion()
 				m.history_prev(edge)
 				m.recalc_height()
-				return m, nil
 			}
+			return m, nil
 		case "down":
 			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
 				m.reset_completion()
 				m.history_next(edge)
 				m.recalc_height()
-				return m, nil
 			}
+			return m, nil
 		case "pgup":
 			m.reset_completion()
 			m.filtered_history_prev(m.current_prompt_anchor())
@@ -840,7 +840,7 @@ func (m shell_prompt) render_completion_value() string {
 		return m.input.Value()
 	}
 	baseRunes := []rune(m.completion_base_value)
-	replacement := []rune(m.completion_suggestions[m.completion_index])
+	replacement := []rune(m.rendered_completion_text())
 	newRunes := append([]rune{}, baseRunes[:m.completion_token_start]...)
 	newRunes = append(newRunes, replacement...)
 	newRunes = append(newRunes, baseRunes[m.completion_base_cursor:]...)
@@ -851,7 +851,18 @@ func (m shell_prompt) completion_rendered_cursor() int {
 	if !m.completion_active || len(m.completion_suggestions) == 0 {
 		return m.cursor_offset()
 	}
-	return m.completion_token_start + rune_len(m.completion_suggestions[m.completion_index])
+	return m.completion_token_start + rune_len(m.rendered_completion_text())
+}
+
+func (m shell_prompt) rendered_completion_text() string {
+	if !m.completion_active || len(m.completion_suggestions) == 0 {
+		return ""
+	}
+	text := m.completion_suggestions[m.completion_index]
+	if len(m.completion_suggestions) == 1 && !strings.HasSuffix(text, "/") && !strings.HasSuffix(text, "\\") {
+		text += " "
+	}
+	return text
 }
 
 func (m *shell_prompt) apply_completion_candidate() {
