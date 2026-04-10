@@ -24,20 +24,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	urootcore "github.com/u-root/u-root/pkg/core"
 	urootchmod "github.com/u-root/u-root/pkg/core/chmod"
-	urootcut "github.com/u-root/u-root/pkg/core/cut"
-	urootdate "github.com/u-root/u-root/pkg/core/date"
 	urootfind "github.com/u-root/u-root/pkg/core/find"
-	urootgrep "github.com/u-root/u-root/pkg/core/grep"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	uroothead "github.com/u-root/u-root/pkg/core/head"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
 	urootshasum "github.com/u-root/u-root/pkg/core/shasum"
-	urootsleep "github.com/u-root/u-root/pkg/core/sleep"
-	urootsort "github.com/u-root/u-root/pkg/core/sort"
 	uroottail "github.com/u-root/u-root/pkg/core/tail"
 	uroottar "github.com/u-root/u-root/pkg/core/tar"
 	uroottee "github.com/u-root/u-root/pkg/core/tee"
-	uroottr "github.com/u-root/u-root/pkg/core/tr"
 	urootuniq "github.com/u-root/u-root/pkg/core/uniq"
 	urootwc "github.com/u-root/u-root/pkg/core/wc"
 	urootwget "github.com/u-root/u-root/pkg/core/wget"
@@ -418,9 +412,6 @@ func (app *shell_app) init_runner(params []string, interactive bool) error {
 
 func (app *shell_app) register_builtins() {
 	app.builtins["base64"] = builtin_def{name: "base64", usage: "base64 [-d] [file]", handler: builtin_base64}
-	app.builtins["cut"] = builtin_def{name: "cut", usage: "cut -f fields [-d delim] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootcut.New() })}
-	app.builtins["date"] = builtin_def{name: "date", usage: "date [+format]", handler: adapt_core_command(func() urootcore.Command { return urootdate.New() })}
-	app.builtins["grep"] = builtin_def{name: "grep", usage: "grep [-ivnlcrFe] pattern [file...]", handler: adapt_core_command(func() urootcore.Command { return urootgrep.New() })}
 	app.builtins["cat"] = builtin_def{name: "cat", usage: "cat [file...]", handler: builtin_cat}
 	app.builtins["chmod"] = builtin_def{name: "chmod", usage: "chmod [-R] mode file...", handler: adapt_core_command(func() urootcore.Command { return urootchmod.New() })}
 	app.builtins["cp"] = builtin_def{name: "cp", usage: "cp [-r] source... destination", handler: builtin_cp}
@@ -435,10 +426,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["mv"] = builtin_def{name: "mv", usage: "mv source... destination", handler: builtin_mv}
 	app.builtins["rm"] = builtin_def{name: "rm", usage: "rm [-r] [-f] path...", handler: builtin_rm}
 	app.builtins["sed"] = builtin_def{name: "sed", usage: "sed [options] [script] [file...]", handler: builtin_sed}
-	app.builtins["sleep"] = builtin_def{name: "sleep", usage: "sleep duration", handler: adapt_core_command(func() urootcore.Command { return urootsleep.New() })}
-	app.builtins["sort"] = builtin_def{name: "sort", usage: "sort [-runfb] [-o file] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootsort.New() })}
 	app.builtins["tee"] = builtin_def{name: "tee", usage: "tee [-a] [file...]", handler: adapt_core_command(func() urootcore.Command { return uroottee.New() })}
-	app.builtins["tr"] = builtin_def{name: "tr", usage: "tr [-ds] set1 [set2]", handler: adapt_core_command(func() urootcore.Command { return uroottr.New() })}
 	app.builtins["uniq"] = builtin_def{name: "uniq", usage: "uniq [-cdui] [input [output]]", handler: adapt_core_command(func() urootcore.Command { return urootuniq.New() })}
 	app.builtins["shasum"] = builtin_def{name: "shasum", usage: "shasum [-a 1|256|512] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootshasum.New() })}
 	app.builtins["tail"] = builtin_def{name: "tail", usage: "tail [-n count] [file]", handler: adapt_core_command(func() urootcore.Command { return uroottail.New() })}
