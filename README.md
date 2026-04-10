@@ -47,6 +47,8 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `tail`
 - `tar`
 - `touch`
+- `wc`
+- `wget`
 - `xargs`
 
 ## `hx` builtin

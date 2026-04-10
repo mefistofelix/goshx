@@ -28,6 +28,10 @@ test_cache\goshx.exe -c "find test_cache/work -name '*.txt'" > test_cache\find.t
 if errorlevel 1 exit /b 1
 findstr /c:"hello.txt" test_cache\find.txt >nul
 if errorlevel 1 echo find test failed & exit /b 1
+test_cache\goshx.exe -c "echo one two three | wc -w" > test_cache\wc.txt
+if errorlevel 1 exit /b 1
+findstr /c:"3" test_cache\wc.txt >nul
+if errorlevel 1 echo wc test failed & exit /b 1
 test_cache\goshx.exe -c "export HELLO_VAR=world; echo $HELLO_VAR" > test_cache\env.txt
 if errorlevel 1 exit /b 1
 set /p ENV_OUT=<test_cache\env.txt
@@ -64,10 +68,21 @@ test_cache\goshx.exe -c "shasum test_cache/ln_source.txt" > test_cache\shasum.tx
 if errorlevel 1 exit /b 1
 findstr /c:"test_cache/ln_source.txt" test_cache\shasum.txt >nul
 if errorlevel 1 echo shasum test failed & exit /b 1
+test_cache\goshx.exe -c "echo line1 > test_cache/tail.txt; echo line2 >> test_cache/tail.txt; echo line3 >> test_cache/tail.txt; tail -n 2 test_cache/tail.txt" > test_cache\tail_out.txt
+if errorlevel 1 exit /b 1
+findstr /c:"line2" test_cache\tail_out.txt >nul
+if errorlevel 1 echo tail first line test failed & exit /b 1
+findstr /c:"line3" test_cache\tail_out.txt >nul
+if errorlevel 1 echo tail second line test failed & exit /b 1
 test_cache\goshx.exe -c "cd test_cache; mkdir -p tar_src; echo packed > tar_src/item.txt; tar -cf archive.tar tar_src; mkdir -p tar_out; tar -xf archive.tar tar_out; cat tar_out/tar_src/item.txt" > test_cache\tar.txt
 if errorlevel 1 exit /b 1
 set /p TAR_OUT=<test_cache\tar.txt
 if not "%TAR_OUT%"=="packed" echo tar test failed & exit /b 1
+if exist test_cache\wget.html del /q test_cache\wget.html
+test_cache\goshx.exe -c "wget -O test_cache/wget.html https://example.com/"
+if errorlevel 1 exit /b 1
+findstr /c:"Example Domain" test_cache\wget.html >nul
+if errorlevel 1 echo wget test failed & exit /b 1
 test_cache\goshx.exe -c "echo one two | xargs -n 1 cmd /c echo" > test_cache\xargs.txt
 if errorlevel 1 exit /b 1
 findstr /c:"one" test_cache\xargs.txt >nul
