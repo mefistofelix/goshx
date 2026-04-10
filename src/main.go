@@ -673,7 +673,7 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "pgup":
-			if m.is_at_prompt_start() {
+			if m.is_at_prompt_end() {
 				m.filtered_history_prev()
 				m.recalc_height()
 				return m, nil
@@ -787,6 +787,14 @@ func (m *shell_prompt) set_value_with_cursor(value string, offset int) {
 	m.input.SetCursor(targetCol)
 }
 
+func (m *shell_prompt) set_value_at_end(value string) {
+	m.input.SetValue(value)
+	for m.input.Line() < m.input.LineCount()-1 {
+		m.input.CursorDown()
+	}
+	m.input.CursorEnd()
+}
+
 func row_col_from_offset(lines []string, offset int) (int, int) {
 	if len(lines) == 0 {
 		return 0, 0
@@ -834,7 +842,7 @@ func (m *shell_prompt) history_prev() {
 	}
 	if m.history_index > 0 {
 		m.history_index--
-		m.set_value_with_cursor(m.history[m.history_index], rune_len(m.history[m.history_index]))
+		m.set_value_at_end(m.history[m.history_index])
 	}
 }
 
@@ -848,10 +856,10 @@ func (m *shell_prompt) history_next() {
 	}
 	m.history_index++
 	if m.history_index == len(m.history) {
-		m.set_value_with_cursor(m.history_draft, rune_len(m.history_draft))
+		m.set_value_at_end(m.history_draft)
 		return
 	}
-	m.set_value_with_cursor(m.history[m.history_index], rune_len(m.history[m.history_index]))
+	m.set_value_at_end(m.history[m.history_index])
 }
 
 func (m *shell_prompt) filtered_history_prev() {
@@ -865,7 +873,7 @@ func (m *shell_prompt) filtered_history_prev() {
 	if m.filtered_history_index > 0 {
 		m.filtered_history_index--
 		item := m.filtered_history[m.filtered_history_index]
-		m.set_value_with_cursor(item, rune_len(item))
+		m.set_value_at_end(item)
 	}
 }
 
@@ -882,11 +890,11 @@ func (m *shell_prompt) filtered_history_next() {
 	}
 	m.filtered_history_index++
 	if m.filtered_history_index == len(m.filtered_history) {
-		m.set_value_with_cursor(m.history_draft, rune_len(m.history_draft))
+		m.set_value_at_end(m.history_draft)
 		return
 	}
 	item := m.filtered_history[m.filtered_history_index]
-	m.set_value_with_cursor(item, rune_len(item))
+	m.set_value_at_end(item)
 }
 
 func (m *shell_prompt) prepare_filtered_history(filter string) bool {
