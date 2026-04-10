@@ -1,0 +1,38 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to upload artifacts to"
+        required: true
+        type: string
+
+jobs:
+  release-artifacts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Build Linux artifact
+        run: |
+          chmod +x build.sh
+          ./build.sh linux-amd64
+
+      - name: Build Windows artifact
+        run: |
+          chmod +x build.sh
+          ./build.sh windows-amd64
+
+      - name: Upload release artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          gh release upload "$RELEASE_TAG" bin/goshx bin/goshx.exe --clobber
