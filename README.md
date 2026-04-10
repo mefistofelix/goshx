@@ -9,7 +9,7 @@ The project currently provides a first working vertical slice:
 
 - `bash`-style command execution through the current `mvdan/sh` development branch
 - interactive mode when started without arguments
-- interactive `Tab` completion for builtin commands and filesystem paths via a `bubbletea` prompt
+- interactive `bubbletea` prompt with multiline editing, caret paste, current-directory prompt, `Tab` completion for builtin commands and filesystem paths, and filtered history navigation with `PgUp`/`PgDn`
 - `-c` command execution mode
 - script file execution mode
 - builtin-first command dispatch
@@ -59,6 +59,19 @@ hx [flags] <source> [dest]
 ```
 
 So generic download and extraction workflows run inside the shell process without spawning an external `hx` executable.
+
+## Interactive prompt
+
+When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that supports:
+
+- multiline shell input
+- paste at the current caret position
+- a prompt prefix that shows the current working directory
+- `Up` and `Down` history browsing when the caret is on the first or last logical input line
+- `PgUp` and `PgDn` history browsing filtered by the current prompt text when the caret is on the first or last logical input line
+- `Esc` to clear the current prompt buffer
+
+When no real TTY is available, `goshx` keeps using the plain non-interactive line reader fallback.
 
 ## Build
 

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	urootcore "github.com/u-root/u-root/pkg/core"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
@@ -68,11 +68,17 @@ type shell_options struct {
 type builtin_handler func(builtin_context) int
 
 type shell_prompt struct {
-	app         *shell_app
-	input       textinput.Model
-	submitted   string
-	interrupted bool
-	eof         bool
+	app                    *shell_app
+	input                  textarea.Model
+	submitted              string
+	interrupted            bool
+	eof                    bool
+	history                []string
+	history_index          int
+	history_draft          string
+	history_filter         string
+	filtered_history       []string
+	filtered_history_index int
 }
 
 func main() {
@@ -232,8 +238,9 @@ func (app *shell_app) run_interactive_plain() int {
 }
 
 func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
+	history := []string{}
 	for {
-		model := new_shell_prompt(app)
+		model := new_shell_prompt(app, history)
 		program := tea.NewProgram(model, tea.WithInput(stdin_file), tea.WithOutput(app.stdout))
 		final_model, err := program.Run()
 		if err != nil {
@@ -256,6 +263,7 @@ func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
 		if line == "" {
 			continue
 		}
+		history = append_history_entry(history, prompt_model.submitted)
 		runErr := app.run_command_text(line)
 		if runErr != nil {
 			if status, ok := interp.IsExitStatus(runErr); ok {
@@ -273,29 +281,54 @@ func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
 	}
 }
 
-func (app *shell_app) prompt() string {
-	return "goshx$ "
+func append_history_entry(history []string, entry string) []string {
+	if strings.TrimSpace(entry) == "" {
+		return history
+	}
+	return append(history, entry)
 }
 
-func new_shell_prompt(app *shell_app) shell_prompt {
-	input := textinput.New()
+func (app *shell_app) prompt() string {
+	return filepath.ToSlash(app.cwd) + "$ "
+}
+
+func (app *shell_app) continuation_prompt() string {
+	return "..> "
+}
+
+func new_shell_prompt(app *shell_app, history []string) shell_prompt {
+	input := textarea.New()
+	input.ShowLineNumbers = false
 	input.Prompt = app.prompt()
-	input.ShowSuggestions = true
+	input.SetPromptFunc(max_int(rune_len(app.prompt()), rune_len(app.continuation_prompt())), func(lineIdx int) string {
+		if lineIdx == 0 {
+			return app.prompt()
+		}
+		return app.continuation_prompt()
+	})
+	input.SetHeight(6)
+	input.SetWidth(80)
 	input.Focus()
 	prompt := shell_prompt{
-		app:   app,
-		input: input,
+		app:                    app,
+		input:                  input,
+		history:                append([]string{}, history...),
+		history_index:          len(history),
+		filtered_history_index: -1,
 	}
-	prompt.refresh_suggestions()
 	return prompt
 }
 
 func (m shell_prompt) Init() tea.Cmd {
-	return textinput.Blink
+	return textarea.Blink
 }
 
 func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.input.SetWidth(max_int(20, msg.Width-1))
+		m.input.SetHeight(clamp_int(msg.Height/3, 3, 8))
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -306,14 +339,43 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.eof = true
 				return m, tea.Quit
 			}
+		case "esc":
+			m.clear_input()
+			return m, nil
 		case "enter":
-			m.submitted = m.input.Value()
-			return m, tea.Quit
+			if shell_input_is_complete(m.input.Value()) {
+				m.submitted = m.input.Value()
+				return m, tea.Quit
+			}
+		case "tab":
+			m.apply_completion()
+			return m, nil
+		case "up":
+			if m.is_at_history_start() {
+				m.history_prev()
+				return m, nil
+			}
+		case "down":
+			if m.is_at_history_end() {
+				m.history_next()
+				return m, nil
+			}
+		case "pgup":
+			if m.is_at_history_start() {
+				m.filtered_history_prev()
+				return m, nil
+			}
+		case "pgdown":
+			if m.is_at_history_end() {
+				m.filtered_history_next()
+				return m, nil
+			}
 		}
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
-	m.refresh_suggestions()
+	m.reset_filtered_history()
+	m.history_index = len(m.history)
 	return m, cmd
 }
 
@@ -321,8 +383,210 @@ func (m shell_prompt) View() string {
 	return m.input.View()
 }
 
-func (m *shell_prompt) refresh_suggestions() {
-	m.input.SetSuggestions(m.app.complete_suggestions([]rune(m.input.Value()), m.input.Position()))
+func (m *shell_prompt) clear_input() {
+	m.input.SetValue("")
+	m.input.CursorEnd()
+	m.history_index = len(m.history)
+	m.history_draft = ""
+	m.reset_filtered_history()
+}
+
+func (m *shell_prompt) apply_completion() {
+	value := m.input.Value()
+	pos := m.cursor_offset()
+	runes := []rune(value)
+	suggestions := m.app.complete_suggestions(runes, pos)
+	if len(suggestions) == 0 {
+		return
+	}
+	segmentStart := completion_segment_start(runes[:pos])
+	tokenStart := completion_token_start(runes[segmentStart:pos]) + segmentStart
+	replacement := suggestions[0]
+	if len(suggestions) == 1 && !strings.HasSuffix(replacement, "/") && !strings.HasSuffix(replacement, "\\") {
+		replacement += " "
+	}
+	newRunes := append([]rune{}, runes[:tokenStart]...)
+	newRunes = append(newRunes, []rune(replacement)...)
+	newRunes = append(newRunes, runes[pos:]...)
+	m.set_value_with_cursor(string(newRunes), tokenStart+len([]rune(replacement)))
+	m.history_index = len(m.history)
+	m.reset_filtered_history()
+}
+
+func (m shell_prompt) cursor_offset() int {
+	lines := strings.Split(m.input.Value(), "\n")
+	row := clamp_int(m.input.Line(), 0, max_int(len(lines)-1, 0))
+	offset := 0
+	for i := 0; i < row; i++ {
+		offset += rune_len(lines[i]) + 1
+	}
+	return offset + m.input.LineInfo().CharOffset
+}
+
+func (m *shell_prompt) set_value_with_cursor(value string, offset int) {
+	m.input.SetValue(value)
+	lines := strings.Split(value, "\n")
+	targetRow, targetCol := row_col_from_offset(lines, offset)
+	for m.input.Line() > targetRow {
+		m.input.CursorUp()
+	}
+	for m.input.Line() < targetRow {
+		m.input.CursorDown()
+	}
+	m.input.SetCursor(targetCol)
+}
+
+func row_col_from_offset(lines []string, offset int) (int, int) {
+	if len(lines) == 0 {
+		return 0, 0
+	}
+	if offset < 0 {
+		return 0, 0
+	}
+	remaining := offset
+	for row, line := range lines {
+		lineLen := rune_len(line)
+		if remaining <= lineLen {
+			return row, remaining
+		}
+		remaining -= lineLen
+		if row < len(lines)-1 {
+			if remaining == 0 {
+				return row + 1, 0
+			}
+			remaining--
+		}
+	}
+	last := len(lines) - 1
+	return last, rune_len(lines[last])
+}
+
+func (m shell_prompt) is_at_history_start() bool {
+	return m.input.Line() == 0
+}
+
+func (m shell_prompt) is_at_history_end() bool {
+	return m.input.Line() == m.input.LineCount()-1
+}
+
+func (m *shell_prompt) history_prev() {
+	m.reset_filtered_history()
+	if len(m.history) == 0 {
+		return
+	}
+	if m.history_index == len(m.history) {
+		m.history_draft = m.input.Value()
+	}
+	if m.history_index > 0 {
+		m.history_index--
+		m.set_value_with_cursor(m.history[m.history_index], rune_len(m.history[m.history_index]))
+	}
+}
+
+func (m *shell_prompt) history_next() {
+	m.reset_filtered_history()
+	if len(m.history) == 0 {
+		return
+	}
+	if m.history_index >= len(m.history) {
+		return
+	}
+	m.history_index++
+	if m.history_index == len(m.history) {
+		m.set_value_with_cursor(m.history_draft, rune_len(m.history_draft))
+		return
+	}
+	m.set_value_with_cursor(m.history[m.history_index], rune_len(m.history[m.history_index]))
+}
+
+func (m *shell_prompt) filtered_history_prev() {
+	filter := m.input.Value()
+	if !m.prepare_filtered_history(filter) {
+		return
+	}
+	if m.filtered_history_index > 0 {
+		m.filtered_history_index--
+		item := m.filtered_history[m.filtered_history_index]
+		m.set_value_with_cursor(item, rune_len(item))
+	}
+}
+
+func (m *shell_prompt) filtered_history_next() {
+	filter := m.history_filter
+	if m.filtered_history_index < 0 {
+		filter = m.input.Value()
+	}
+	if !m.prepare_filtered_history(filter) {
+		return
+	}
+	if m.filtered_history_index >= len(m.filtered_history) {
+		return
+	}
+	m.filtered_history_index++
+	if m.filtered_history_index == len(m.filtered_history) {
+		m.set_value_with_cursor(m.history_draft, rune_len(m.history_draft))
+		return
+	}
+	item := m.filtered_history[m.filtered_history_index]
+	m.set_value_with_cursor(item, rune_len(item))
+}
+
+func (m *shell_prompt) prepare_filtered_history(filter string) bool {
+	if m.history_filter != filter || m.filtered_history_index < 0 {
+		m.history_filter = filter
+		m.filtered_history = filtered_history_entries(m.history, filter)
+		m.filtered_history_index = len(m.filtered_history)
+		m.history_draft = m.input.Value()
+	}
+	return len(m.filtered_history) > 0
+}
+
+func (m *shell_prompt) reset_filtered_history() {
+	m.history_filter = ""
+	m.filtered_history = nil
+	m.filtered_history_index = -1
+}
+
+func filtered_history_entries(history []string, filter string) []string {
+	matches := []string{}
+	for _, item := range history {
+		if filter == "" || strings.Contains(strings.ToLower(item), strings.ToLower(filter)) {
+			matches = append(matches, item)
+		}
+	}
+	return matches
+}
+
+func rune_len(s string) int {
+	return len([]rune(s))
+}
+
+func max_int(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func clamp_int(value int, low int, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
+}
+
+func shell_input_is_complete(src string) bool {
+	if strings.TrimSpace(src) == "" {
+		return true
+	}
+	_, err := parse_shell_program("-c", src)
+	if err == nil {
+		return true
+	}
+	return !syntax.IsIncomplete(err)
 }
 
 func (app *shell_app) complete_suggestions(line []rune, pos int) []string {
@@ -492,6 +756,7 @@ func (app *shell_app) run_command_text(command string) error {
 	if err != nil {
 		return err
 	}
+	defer app.sync_runtime_state()
 	return app.runner.Run(context.Background(), file)
 }
 
@@ -505,7 +770,15 @@ func (app *shell_app) run_script_file(path string) error {
 	if err != nil {
 		return err
 	}
+	defer app.sync_runtime_state()
 	return app.runner.Run(context.Background(), parsed)
+}
+
+func (app *shell_app) sync_runtime_state() {
+	if app.runner == nil {
+		return
+	}
+	app.cwd = app.runner.Dir
 }
 
 func parse_shell_program(name string, src string) (*syntax.File, error) {
