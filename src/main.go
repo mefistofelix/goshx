@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -486,7 +487,10 @@ func load_history_file(path string) ([]string, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		entry := strings.ReplaceAll(line, `\n`, "\n")
+		entry, decode_err := strconv.Unquote(line)
+		if decode_err != nil {
+			entry = line
+		}
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
@@ -515,7 +519,7 @@ func (app *shell_app) append_history(entry string) {
 		fmt.Fprintln(app.stderr, err)
 		return
 	}
-	_, write_err := fmt.Fprintln(file, strings.ReplaceAll(entry, "\n", `\n`))
+	_, write_err := fmt.Fprintln(file, strconv.Quote(entry))
 	close_err := file.Close()
 	if write_err != nil || close_err != nil {
 		fmt.Fprintln(app.stderr, first_error(write_err, close_err))
@@ -1477,7 +1481,6 @@ func builtin_find(b builtin_context) int {
 	}
 	return 0
 }
-
 
 func open_optional_input(b builtin_context, files []string) (io.Reader, func(), error) {
 	if len(files) == 0 {

@@ -87,7 +87,7 @@ When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that support
 - `PgUp` and `PgDn` history browsing filtered by the current prompt text when the caret is on the first or last logical input line
 - `Esc` to clear the current prompt buffer
 
-Interactive history is loaded from `.goshx/history` relative to the `goshx` binary directory and new commands are appended after execution regardless of success or failure.
+Interactive history is loaded from `.goshx/history` relative to the `goshx` binary directory and new commands are appended after execution regardless of success or failure. The history file keeps exactly one escaped line per command so multiline input and literal backslashes round-trip correctly.
 Use `--no-history` to disable history loading and prevent creation of the `.goshx` profile/history directory.
 
 When no real TTY is available, `goshx` keeps using the plain non-interactive line reader fallback.
