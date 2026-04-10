@@ -89,7 +89,7 @@ type shell_options struct {
 	disable_history bool
 	json_mode       bool
 	json_payload    string
-	json_oneline    bool
+	json_out_mode   string
 }
 
 // json_request is the input schema for --json mode.
@@ -167,18 +167,29 @@ func parse_cli_args(argv []string) (shell_options, error) {
 			}
 		case args[0] == "--no-history":
 			opts.disable_history = true
+		case strings.HasPrefix(args[0], "--json-out-mode="):
+			opts.json_out_mode = strings.TrimPrefix(args[0], "--json-out-mode=")
+		case args[0] == "--json-out-mode":
+			if len(args) < 2 {
+				return opts, errors.New("missing value after --json-out-mode")
+			}
+			opts.json_out_mode = args[1]
+			args = args[1:]
 		case args[0] == "--json-out-oneline":
-			opts.json_oneline = true
+			return opts, errors.New("--json-out-oneline has been renamed to --json-out-mode ndjson")
 		case args[0] == "--compact":
-			return opts, errors.New("--compact has been renamed to --json-out-oneline")
+			return opts, errors.New("--compact has been renamed to --json-out-mode ndjson")
 		default:
 			goto done
 		}
 		args = args[1:]
 	}
 done:
-	if opts.json_oneline && !opts.json_mode {
-		return opts, errors.New("--json-out-oneline requires --json")
+	if opts.json_out_mode != "" && !opts.json_mode {
+		return opts, errors.New("--json-out-mode requires --json")
+	}
+	if opts.json_out_mode != "" && opts.json_out_mode != "pretty" && opts.json_out_mode != "ndjson" {
+		return opts, errors.New(`--json-out-mode must be "pretty" or "ndjson"`)
 	}
 	if opts.json_mode {
 		if len(args) > 0 {
@@ -256,9 +267,10 @@ func (app *shell_app) run_with_error(err error) int {
 }
 
 func (app *shell_app) run_json_mode(opts shell_options) int {
+	json_out_mode := effective_json_output_mode(opts)
 	write_resp := func(resp json_response) int {
 		var out []byte
-		if opts.json_oneline {
+		if json_out_mode == "ndjson" {
 			out, _ = json.Marshal(resp)
 		} else {
 			out, _ = json.MarshalIndent(resp, "", "  ")
@@ -338,7 +350,17 @@ func (app *shell_app) run_json_mode(opts shell_options) int {
 }
 
 func is_json_cli_flag(arg string) bool {
-	return arg == "--no-history" || arg == "--json-out-oneline"
+	return arg == "--no-history" || arg == "--json-out-mode"
+}
+
+func effective_json_output_mode(opts shell_options) string {
+	if opts.json_out_mode != "" {
+		return opts.json_out_mode
+	}
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		return "pretty"
+	}
+	return "ndjson"
 }
 
 func read_json_request(opts shell_options) (json_request, error) {

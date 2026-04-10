@@ -134,7 +134,8 @@ Response schema:
 }
 ```
 
-Output is pretty-printed by default. Use `--json-out-oneline` together with `--json` to get a single-line JSON response.
+Output mode is selected with `--json-out-mode pretty|ndjson`.
+If no mode is specified, `goshx` defaults to `pretty` when stdout is a TTY and to `ndjson` when stdout is not a TTY.
 The process exits with the same code as the executed command.
 
 ## Architecture
