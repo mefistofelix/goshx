@@ -120,6 +120,12 @@ type shell_prompt struct {
 	history_filter         string
 	filtered_history       []string
 	filtered_history_index int
+	completion_active      bool
+	completion_base_value  string
+	completion_base_cursor int
+	completion_token_start int
+	completion_suggestions []string
+	completion_index       int
 	term_height            int
 }
 
@@ -694,34 +700,41 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.submitted = m.input.Value()
 				return m, tea.Quit
 			}
+			m.reset_completion()
 			m.insert_newline()
 			return m, nil
 		case "tab":
 			m.apply_completion()
 			return m, nil
 		case "home":
+			m.reset_completion()
 			m.move_cursor_to_prompt_start()
 			return m, nil
 		case "end":
+			m.reset_completion()
 			m.move_cursor_to_prompt_end()
 			return m, nil
 		case "up":
 			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+				m.reset_completion()
 				m.history_prev(edge)
 				m.recalc_height()
 				return m, nil
 			}
 		case "down":
 			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+				m.reset_completion()
 				m.history_next(edge)
 				m.recalc_height()
 				return m, nil
 			}
 		case "pgup":
+			m.reset_completion()
 			m.filtered_history_prev(m.current_prompt_anchor())
 			m.recalc_height()
 			return m, nil
 		case "pgdown":
+			m.reset_completion()
 			m.filtered_history_next(m.current_prompt_anchor())
 			m.recalc_height()
 			return m, nil
@@ -731,6 +744,7 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.input, cmd = m.input.Update(msg)
 	m.recalc_height()
 	m.reset_filtered_history()
+	m.reset_completion()
 	m.history_index = len(m.history)
 	return m, cmd
 }
@@ -786,21 +800,64 @@ func (m *shell_prompt) insert_newline() {
 func (m *shell_prompt) apply_completion() {
 	value := m.input.Value()
 	pos := m.cursor_offset()
+	if m.completion_active && value == m.render_completion_value() && pos == m.completion_rendered_cursor() {
+		if len(m.completion_suggestions) == 0 {
+			m.reset_completion()
+			return
+		}
+		m.completion_index = (m.completion_index + 1) % len(m.completion_suggestions)
+		m.apply_completion_candidate()
+		return
+	}
 	runes := []rune(value)
 	suggestions := m.app.complete_suggestions(runes, pos)
 	if len(suggestions) == 0 {
+		m.reset_completion()
 		return
 	}
 	segmentStart := completion_segment_start(runes[:pos])
 	tokenStart := completion_token_start(runes[segmentStart:pos]) + segmentStart
-	replacement := suggestions[0]
-	if len(suggestions) == 1 && !strings.HasSuffix(replacement, "/") && !strings.HasSuffix(replacement, "\\") {
-		replacement += " "
+	m.completion_active = true
+	m.completion_base_value = value
+	m.completion_base_cursor = pos
+	m.completion_token_start = tokenStart
+	m.completion_suggestions = suggestions
+	m.completion_index = 0
+	m.apply_completion_candidate()
+}
+
+func (m *shell_prompt) reset_completion() {
+	m.completion_active = false
+	m.completion_base_value = ""
+	m.completion_base_cursor = 0
+	m.completion_token_start = 0
+	m.completion_suggestions = nil
+	m.completion_index = 0
+}
+
+func (m shell_prompt) render_completion_value() string {
+	if !m.completion_active || len(m.completion_suggestions) == 0 {
+		return m.input.Value()
 	}
-	newRunes := append([]rune{}, runes[:tokenStart]...)
-	newRunes = append(newRunes, []rune(replacement)...)
-	newRunes = append(newRunes, runes[pos:]...)
-	m.set_value_with_cursor(string(newRunes), tokenStart+len([]rune(replacement)))
+	baseRunes := []rune(m.completion_base_value)
+	replacement := []rune(m.completion_suggestions[m.completion_index])
+	newRunes := append([]rune{}, baseRunes[:m.completion_token_start]...)
+	newRunes = append(newRunes, replacement...)
+	newRunes = append(newRunes, baseRunes[m.completion_base_cursor:]...)
+	return string(newRunes)
+}
+
+func (m shell_prompt) completion_rendered_cursor() int {
+	if !m.completion_active || len(m.completion_suggestions) == 0 {
+		return m.cursor_offset()
+	}
+	return m.completion_token_start + rune_len(m.completion_suggestions[m.completion_index])
+}
+
+func (m *shell_prompt) apply_completion_candidate() {
+	value := m.render_completion_value()
+	cursor := m.completion_rendered_cursor()
+	m.set_value_with_cursor(value, cursor)
 	m.history_index = len(m.history)
 	m.reset_filtered_history()
 }
