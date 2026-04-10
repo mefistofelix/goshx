@@ -660,6 +660,9 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			m.apply_completion()
 			return m, nil
+		case "end":
+			m.move_cursor_to_prompt_end()
+			return m, nil
 		case "up":
 			if m.is_at_prompt_start() {
 				m.history_prev()
@@ -729,7 +732,7 @@ func (m *shell_prompt) recalc_height() {
 func (m *shell_prompt) clear_input() {
 	m.input.SetValue("")
 	m.recalc_height()
-	m.input.CursorEnd()
+	m.move_cursor_to_prompt_end()
 	m.history_index = len(m.history)
 	m.history_draft = ""
 	m.reset_filtered_history()
@@ -789,6 +792,10 @@ func (m *shell_prompt) set_value_with_cursor(value string, offset int) {
 
 func (m *shell_prompt) set_value_at_end(value string) {
 	m.input.SetValue(value)
+	m.move_cursor_to_prompt_end()
+}
+
+func (m *shell_prompt) move_cursor_to_prompt_end() {
 	for m.input.Line() < m.input.LineCount()-1 {
 		m.input.CursorDown()
 	}

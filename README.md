@@ -78,6 +78,7 @@ When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that support
 - `Enter` inserts a new line when the shell input is incomplete, including trailing `\` line continuations
 - paste at the current caret position
 - a prompt prefix that shows the current working directory
+- `End` moves the caret to the end of the full prompt buffer
 - `Up` and `Down` history browsing only when the caret is at the absolute start or end of the prompt buffer
 - `PgUp` and `PgDn` filtered history browsing only when the caret is at the absolute start or end of the prompt buffer
 - `Esc` to clear the current prompt buffer
