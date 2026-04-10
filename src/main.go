@@ -166,6 +166,9 @@ func parse_cli_args(argv []string) (shell_options, error) {
 		args = args[1:]
 	}
 done:
+	if opts.json_compact && !opts.json_mode {
+		return opts, errors.New("--compact requires --json")
+	}
 	if opts.json_mode {
 		return opts, nil
 	}
@@ -191,7 +194,7 @@ func new_shell_app(opts shell_options) (*shell_app, error) {
 	if err != nil {
 		return nil, err
 	}
-	history_file, history, history_on, err := resolve_history_state(!opts.disable_history)
+	history_file, history, history_on, err := resolve_history_state(!opts.disable_history && !opts.json_mode)
 	if err != nil {
 		return nil, err
 	}

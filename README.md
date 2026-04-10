@@ -96,6 +96,7 @@ When no real TTY is available, `goshx` keeps using the plain non-interactive lin
 
 `goshx --json` reads a JSON request from stdin, executes the command in-process, and writes a JSON response to stdout.
 This mode is designed for programmatic use by AI agents and automation pipelines.
+It is non-interactive and does not load or persist shell history/profile state.
 
 Request schema:
 
@@ -122,7 +123,7 @@ Response schema:
 }
 ```
 
-Output is pretty-printed by default. Use `--compact` to get single-line JSON.
+Output is pretty-printed by default. Use `--compact` together with `--json` to get single-line JSON.
 The process exits with the same code as the executed command.
 
 ## Architecture
