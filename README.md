@@ -49,6 +49,8 @@ The current `gzip` builtin is now wired through the upstream `u-root/pkg/core/gz
 The current `ln` builtin is wired through the forked `u-root/pkg/core/ln` command interface.
 The current `hx` builtin now embeds the real [`hx`](https://github.com/mefistofelix/hx) runtime in-process instead of using the older `goshx`-local helper implementation.
 
+On Windows, `ln -s` now reports an explicit hint to enable Developer Mode or run elevated when symbolic link creation is blocked by OS privilege policy.
+
 This means `goshx` now exposes the same `hx` CLI surface as the upstream project:
 
 ```text

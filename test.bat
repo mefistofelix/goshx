@@ -40,6 +40,10 @@ test_cache\goshx.exe -c "echo linkme > test_cache/ln_source.txt; ln test_cache/l
 if errorlevel 1 exit /b 1
 set /p LN_OUT=<test_cache\ln.txt
 if not "%LN_OUT%"=="linkme" echo ln test failed & exit /b 1
+test_cache\goshx.exe -c "ln -s test_cache/ln_source.txt test_cache/ln_symlink.txt; cat test_cache/ln_symlink.txt" > test_cache\lns_out.txt
+if errorlevel 1 exit /b 1
+set /p LNS_OUT=<test_cache\lns_out.txt
+if not "%LNS_OUT%"=="linkme" echo ln -s test failed & exit /b 1
 test_cache\goshx.exe -c "echo zipme > test_cache/gzip.txt; gzip test_cache/gzip.txt"
 if errorlevel 1 exit /b 1
 if not exist test_cache\gzip.txt.gz echo gzip test failed & exit /b 1
