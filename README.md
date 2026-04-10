@@ -92,6 +92,16 @@ Use `--no-history` to disable history loading and prevent creation of the `.gosh
 
 When no real TTY is available, `goshx` keeps using the plain non-interactive line reader fallback.
 
+## Architecture
+
+`goshx` is built on three main dependencies:
+
+- [`mvdan/sh`](https://github.com/mvdan/sh) — shell parser and interpreter
+- [`mefistofelix/u-root`](https://github.com/mefistofelix/u-root) — fork of `u-root` with a `pkg/core` adapter layer for in-process builtin integration
+- [`mefistofelix/hx`](https://github.com/mefistofelix/hx) — download and extraction integrated as a builtin
+
+The `u-root` fork adds a `pkg/core` package that defines a `Command` interface (`SetIO`, `SetWorkingDir`, `Run`, `RunContext`) used to wire each builtin into the shell's stdin/stdout/stderr and working directory without spawning a subprocess.
+
 ## Build
 
 Windows:

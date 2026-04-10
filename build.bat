@@ -14,6 +14,7 @@ set GOROOT=%ROOT%build_cache\tools\go1.26.2\go
 set PATH=%GOROOT%\bin;%PATH%
 set GOCACHE=%ROOT%build_cache\gocache
 set GOMODCACHE=%ROOT%build_cache\gomodcache
+set GONOSUMDB=github.com/mefistofelix/*
 if not exist bin mkdir bin
 set GOOS=windows
 set GOARCH=amd64
