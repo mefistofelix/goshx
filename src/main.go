@@ -92,6 +92,7 @@ type shell_prompt struct {
 	history_filter         string
 	filtered_history       []string
 	filtered_history_index int
+	term_height            int
 }
 
 func main() {
@@ -348,10 +349,7 @@ func load_history_file(path string) ([]string, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		entry, err := strconv.Unquote(line)
-		if err != nil {
-			entry = line
-		}
+		entry := strings.ReplaceAll(line, `\n`, "\n")
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
@@ -380,7 +378,7 @@ func (app *shell_app) append_history(entry string) {
 		fmt.Fprintln(app.stderr, err)
 		return
 	}
-	_, write_err := fmt.Fprintln(file, strconv.Quote(entry))
+	_, write_err := fmt.Fprintln(file, strings.ReplaceAll(entry, "\n", `\n`))
 	close_err := file.Close()
 	if write_err != nil || close_err != nil {
 		fmt.Fprintln(app.stderr, first_error(write_err, close_err))
@@ -405,7 +403,7 @@ func new_shell_prompt(app *shell_app, history []string) shell_prompt {
 		}
 		return app.continuation_prompt()
 	})
-	input.SetHeight(6)
+	input.SetHeight(1)
 	input.SetWidth(80)
 	input.Focus()
 	prompt := shell_prompt{
@@ -414,6 +412,7 @@ func new_shell_prompt(app *shell_app, history []string) shell_prompt {
 		history:                append([]string{}, history...),
 		history_index:          len(history),
 		filtered_history_index: -1,
+		term_height:            24,
 	}
 	return prompt
 }
@@ -426,7 +425,8 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.input.SetWidth(max_int(20, msg.Width-1))
-		m.input.SetHeight(clamp_int(msg.Height/3, 3, 8))
+		m.term_height = msg.Height
+		m.recalc_height()
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -473,6 +473,7 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	m.recalc_height()
 	m.reset_filtered_history()
 	m.history_index = len(m.history)
 	return m, cmd
@@ -482,8 +483,37 @@ func (m shell_prompt) View() string {
 	return m.input.View()
 }
 
+func (m *shell_prompt) recalc_height() {
+	value := m.input.Value()
+	lines := strings.Split(value, "\n")
+	prompt_w := rune_len(m.app.prompt())
+	cont_w := rune_len(m.app.continuation_prompt())
+	total := 0
+	for i, line := range lines {
+		avail := m.input.Width() - prompt_w
+		if i > 0 {
+			avail = m.input.Width() - cont_w
+		}
+		if avail < 1 {
+			avail = 1
+		}
+		line_len := rune_len(line)
+		if line_len == 0 {
+			total++
+		} else {
+			total += (line_len + avail - 1) / avail
+		}
+	}
+	max_h := m.term_height / 2
+	if max_h < 4 {
+		max_h = 4
+	}
+	m.input.SetHeight(clamp_int(total, 1, max_h))
+}
+
 func (m *shell_prompt) clear_input() {
 	m.input.SetValue("")
+	m.recalc_height()
 	m.input.CursorEnd()
 	m.history_index = len(m.history)
 	m.history_draft = ""
@@ -758,6 +788,10 @@ func unicode_is_completion_separator(r rune) bool {
 	}
 }
 
+func is_windows_drive_path(token string) bool {
+	return len(token) >= 2 && token[1] == ':'
+}
+
 func should_complete_paths(token string, arg_index int) bool {
 	if token == "" {
 		return arg_index > 0
@@ -767,22 +801,47 @@ func should_complete_paths(token string, arg_index int) bool {
 		strings.HasPrefix(token, "~") ||
 		strings.Contains(token, "/") ||
 		strings.Contains(token, "\\") ||
-		filepath.IsAbs(token)
+		filepath.IsAbs(token) ||
+		is_windows_drive_path(token)
 }
 
 func (app *shell_app) complete_command_candidates(token string) []string {
+	lower_token := strings.ToLower(token)
 	seen := map[string]bool{}
-	candidates := make([]string, 0, len(app.builtins)+16)
-	for _, name := range shell_builtin_names() {
-		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(token)) && !seen[name] {
+	candidates := make([]string, 0, len(app.builtins)+64)
+	add := func(name string) {
+		if strings.HasPrefix(strings.ToLower(name), lower_token) && !seen[name] {
 			seen[name] = true
 			candidates = append(candidates, name)
 		}
 	}
+	for _, name := range shell_builtin_names() {
+		add(name)
+	}
 	for name := range app.builtins {
-		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(token)) && !seen[name] {
-			seen[name] = true
-			candidates = append(candidates, name)
+		add(name)
+	}
+	// scan PATH directories for executables
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if runtime.GOOS == "windows" {
+				ext := strings.ToLower(filepath.Ext(name))
+				switch ext {
+				case ".exe", ".bat", ".cmd":
+					name = name[:len(name)-len(ext)]
+				default:
+					continue
+				}
+			}
+			add(name)
 		}
 	}
 	sort.Strings(candidates)
@@ -812,24 +871,33 @@ func shell_builtin_names() []string {
 
 func (app *shell_app) complete_path_candidates(token string) []string {
 	normalized := strings.TrimPrefix(token, "~")
-	search_dir := app.cwd
-	display_dir := ""
-	prefix := normalized
-	if last_sep := strings.LastIndexAny(normalized, `/\`); last_sep >= 0 {
-		display_dir = normalized[:last_sep+1]
-		prefix = normalized[last_sep+1:]
-		search_dir = filepath.Join(app.cwd, filepath.FromSlash(strings.ReplaceAll(display_dir, "\\", "/")))
-	}
-	if filepath.IsAbs(normalized) {
-		search_dir = filepath.Dir(normalized)
-		display_dir = filepath.Dir(normalized)
-		prefix = filepath.Base(normalized)
-		if display_dir == "." {
-			display_dir = ""
+	var search_dir, display_prefix, prefix string
+
+	if filepath.IsAbs(normalized) || is_windows_drive_path(normalized) {
+		// absolute path or windows drive: split on last separator
+		if last_sep := strings.LastIndexAny(normalized, `/\`); last_sep >= 0 {
+			display_prefix = normalized[:last_sep+1]
+			prefix = normalized[last_sep+1:]
+			search_dir = filepath.Clean(display_prefix)
 		} else {
-			display_dir += string(filepath.Separator)
+			// e.g. "c:" with no separator yet — list the drive root
+			search_dir = normalized + string(filepath.Separator)
+			display_prefix = search_dir
+			prefix = ""
+		}
+	} else {
+		// relative path
+		if last_sep := strings.LastIndexAny(normalized, `/\`); last_sep >= 0 {
+			display_prefix = normalized[:last_sep+1]
+			prefix = normalized[last_sep+1:]
+			search_dir = filepath.Join(app.cwd, filepath.FromSlash(strings.ReplaceAll(display_prefix, "\\", "/")))
+		} else {
+			search_dir = app.cwd
+			display_prefix = ""
+			prefix = normalized
 		}
 	}
+
 	entries, err := os.ReadDir(search_dir)
 	if err != nil {
 		return nil
@@ -840,11 +908,11 @@ func (app *shell_app) complete_path_candidates(token string) []string {
 		if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
 			continue
 		}
-		candidate := display_dir + name
+		candidate := display_prefix + name
 		if entry.IsDir() {
-			candidate += string(filepath.Separator)
+			candidate += "/"
 		}
-		candidates = append(candidates, filepath.ToSlash(candidate))
+		candidates = append(candidates, candidate)
 	}
 	sort.Strings(candidates)
 	return candidates
