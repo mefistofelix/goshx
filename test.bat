@@ -105,4 +105,40 @@ if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
 (echo echo no-history& echo.) | test_cache\goshx.exe --no-history >nul 2>nul
 if errorlevel 1 exit /b 1
 if exist test_cache\.goshx echo no-history flag test failed & exit /b 1
+test_cache\goshx.exe -c "printf 'apple\nbanana\ncherry\n' | grep an" > test_cache\grep.txt
+if errorlevel 1 exit /b 1
+findstr /c:"banana" test_cache\grep.txt >nul
+if errorlevel 1 echo grep match test failed & exit /b 1
+test_cache\goshx.exe -c "printf 'banana\napple\ncherry\n' | sort" > test_cache\sort.txt
+if errorlevel 1 exit /b 1
+findstr /c:"apple" test_cache\sort.txt >nul
+if errorlevel 1 echo sort test failed & exit /b 1
+test_cache\goshx.exe -c "printf 'a\na\nb\nb\nb\nc\n' | uniq -c" > test_cache\uniq.txt
+if errorlevel 1 exit /b 1
+findstr /c:"2 a" test_cache\uniq.txt >nul
+if errorlevel 1 echo uniq count test failed & exit /b 1
+findstr /c:"3 b" test_cache\uniq.txt >nul
+if errorlevel 1 echo uniq count b test failed & exit /b 1
+test_cache\goshx.exe -c "printf 'one:two:three\nfour:five:six\n' | cut -d: -f2" > test_cache\cut.txt
+if errorlevel 1 exit /b 1
+findstr /c:"two" test_cache\cut.txt >nul
+if errorlevel 1 echo cut fields test failed & exit /b 1
+findstr /c:"five" test_cache\cut.txt >nul
+if errorlevel 1 echo cut fields2 test failed & exit /b 1
+test_cache\goshx.exe -c "echo hello | tee test_cache/tee_file.txt" > test_cache\tee_stdout.txt
+if errorlevel 1 exit /b 1
+findstr /c:"hello" test_cache\tee_file.txt >nul
+if errorlevel 1 echo tee file test failed & exit /b 1
+findstr /c:"hello" test_cache\tee_stdout.txt >nul
+if errorlevel 1 echo tee stdout test failed & exit /b 1
+test_cache\goshx.exe -c "printf 'hello\n' | tr 'a-z' 'A-Z'" > test_cache\tr.txt
+if errorlevel 1 exit /b 1
+findstr /c:"HELLO" test_cache\tr.txt >nul
+if errorlevel 1 echo tr test failed & exit /b 1
+test_cache\goshx.exe -c "sleep 0.1"
+if errorlevel 1 echo sleep test failed & exit /b 1
+test_cache\goshx.exe -c "date +%%Y" > test_cache\date.txt
+if errorlevel 1 exit /b 1
+findstr /c:"2026" test_cache\date.txt >nul
+if errorlevel 1 echo date test failed & exit /b 1
 echo Tests passed

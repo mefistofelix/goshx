@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"regexp"
 	gosedsed "github.com/mefistofelix/gosed/sed"
 	hxlib "hx/src/hx"
 	"io"
@@ -207,6 +208,9 @@ func (app *shell_app) init_runner(params []string, interactive bool) error {
 
 func (app *shell_app) register_builtins() {
 	app.builtins["base64"] = builtin_def{name: "base64", usage: "base64 [-d] [file]", handler: builtin_base64}
+	app.builtins["cut"] = builtin_def{name: "cut", usage: "cut -f fields [-d delim] [file...]", handler: builtin_cut}
+	app.builtins["date"] = builtin_def{name: "date", usage: "date [+format]", handler: builtin_date}
+	app.builtins["grep"] = builtin_def{name: "grep", usage: "grep [-ivnlcrFe] pattern [file...]", handler: builtin_grep}
 	app.builtins["cat"] = builtin_def{name: "cat", usage: "cat [file...]", handler: builtin_cat}
 	app.builtins["chmod"] = builtin_def{name: "chmod", usage: "chmod [-R] mode file...", handler: adapt_core_command(func() urootcore.Command { return urootchmod.New() })}
 	app.builtins["cp"] = builtin_def{name: "cp", usage: "cp [-r] source... destination", handler: builtin_cp}
@@ -221,6 +225,11 @@ func (app *shell_app) register_builtins() {
 	app.builtins["mv"] = builtin_def{name: "mv", usage: "mv source... destination", handler: builtin_mv}
 	app.builtins["rm"] = builtin_def{name: "rm", usage: "rm [-r] [-f] path...", handler: builtin_rm}
 	app.builtins["sed"] = builtin_def{name: "sed", usage: "sed [options] [script] [file...]", handler: builtin_sed}
+	app.builtins["sleep"] = builtin_def{name: "sleep", usage: "sleep duration", handler: builtin_sleep}
+	app.builtins["sort"] = builtin_def{name: "sort", usage: "sort [-runfb] [-o file] [file...]", handler: builtin_sort}
+	app.builtins["tee"] = builtin_def{name: "tee", usage: "tee [-a] [file...]", handler: builtin_tee}
+	app.builtins["tr"] = builtin_def{name: "tr", usage: "tr [-ds] set1 [set2]", handler: builtin_tr}
+	app.builtins["uniq"] = builtin_def{name: "uniq", usage: "uniq [-cdui] [input [output]]", handler: builtin_uniq}
 	app.builtins["shasum"] = builtin_def{name: "shasum", usage: "shasum [-a 1|256|512] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootshasum.New() })}
 	app.builtins["tail"] = builtin_def{name: "tail", usage: "tail [-n count] [file]", handler: adapt_core_command(func() urootcore.Command { return uroottail.New() })}
 	app.builtins["tar"] = builtin_def{name: "tar", usage: "tar -c|-x|-t -f file [path]", handler: adapt_core_command(func() urootcore.Command { return uroottar.New() })}
@@ -1565,4 +1574,676 @@ func first_error(errs ...error) error {
 		}
 	}
 	return nil
+}
+
+// --- grep ---
+
+func builtin_grep(b builtin_context) int {
+	args := b.args
+	var invert, ignore_case, line_num, files_only, count_only, fixed, quiet, recursive bool
+	var patterns []string
+	positional := []string{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(a) > 1 && a[0] == '-' && a[1] != '-' {
+			for _, ch := range a[1:] {
+				switch ch {
+				case 'v':
+					invert = true
+				case 'i':
+					ignore_case = true
+				case 'n':
+					line_num = true
+				case 'l':
+					files_only = true
+				case 'c':
+					count_only = true
+				case 'F':
+					fixed = true
+				case 'q':
+					quiet = true
+				case 'r':
+					recursive = true
+				case 'e':
+					if i+1 < len(args) {
+						i++
+						patterns = append(patterns, args[i])
+					}
+				case 'h':
+					// suppress filename — handled via file count
+				}
+			}
+			continue
+		}
+		positional = append(positional, a)
+	}
+	if len(patterns) == 0 && len(positional) > 0 {
+		patterns = []string{positional[0]}
+		positional = positional[1:]
+	}
+	if len(patterns) == 0 {
+		fmt.Fprintln(b.stderr, "grep: missing pattern")
+		return 1
+	}
+
+	// build combined regexp
+	combined := strings.Join(patterns, "|")
+	if fixed {
+		parts := make([]string, len(patterns))
+		for i, p := range patterns {
+			parts[i] = regexp.QuoteMeta(p)
+		}
+		combined = strings.Join(parts, "|")
+	}
+	if ignore_case {
+		combined = "(?i)" + combined
+	}
+	re, err := regexp.Compile(combined)
+	if err != nil {
+		fmt.Fprintln(b.stderr, "grep:", err)
+		return 2
+	}
+
+	// collect files, expanding recursive dirs
+	files := []string{}
+	if len(positional) == 0 {
+		files = append(files, "-")
+	} else {
+		for _, p := range positional {
+			if recursive {
+				_ = filepath.WalkDir(p, func(path string, d fs.DirEntry, err error) error {
+					if err == nil && !d.IsDir() {
+						files = append(files, path)
+					}
+					return nil
+				})
+			} else {
+				files = append(files, p)
+			}
+		}
+	}
+	show_name := len(files) > 1
+	matched_any := false
+	for _, fname := range files {
+		var r io.Reader
+		if fname == "-" {
+			r = b.stdin
+		} else {
+			f, err := os.Open(fname)
+			if err != nil {
+				fmt.Fprintln(b.stderr, "grep:", err)
+				continue
+			}
+			defer f.Close()
+			r = f
+		}
+		scanner := bufio.NewScanner(r)
+		line_no := 0
+		match_count := 0
+		for scanner.Scan() {
+			line_no++
+			line := scanner.Text()
+			hit := re.MatchString(line)
+			if invert {
+				hit = !hit
+			}
+			if !hit {
+				continue
+			}
+			matched_any = true
+			match_count++
+			if quiet || files_only || count_only {
+				continue
+			}
+			prefix := ""
+			if show_name {
+				prefix = fname + ":"
+			}
+			if line_num {
+				prefix += fmt.Sprintf("%d:", line_no)
+			}
+			fmt.Fprintln(b.stdout, prefix+line)
+		}
+		if files_only && match_count > 0 {
+			fmt.Fprintln(b.stdout, fname)
+		}
+		if count_only {
+			if show_name {
+				fmt.Fprintf(b.stdout, "%s:%d\n", fname, match_count)
+			} else {
+				fmt.Fprintln(b.stdout, match_count)
+			}
+		}
+	}
+	if matched_any {
+		return 0
+	}
+	return 1
+}
+
+// --- sort ---
+
+func builtin_sort(b builtin_context) int {
+	var reverse, unique_flag, numeric, fold, ignore_blanks bool
+	var output_file string
+	args := b.args
+	files := []string{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			files = append(files, args[i+1:]...)
+			break
+		}
+		if len(a) > 1 && a[0] == '-' && a[1] != '-' {
+			for _, ch := range a[1:] {
+				switch ch {
+				case 'r':
+					reverse = true
+				case 'u':
+					unique_flag = true
+				case 'n':
+					numeric = true
+				case 'f':
+					fold = true
+				case 'b':
+					ignore_blanks = true
+				case 'o':
+					if i+1 < len(args) {
+						i++
+						output_file = args[i]
+					}
+				}
+			}
+			continue
+		}
+		files = append(files, a)
+	}
+
+	var lines []string
+	read_lines := func(r io.Reader) {
+		scanner := bufio.NewScanner(r)
+		for scanner.Scan() {
+			lines = append(lines, scanner.Text())
+		}
+	}
+	if len(files) == 0 {
+		read_lines(b.stdin)
+	} else {
+		for _, fname := range files {
+			f, err := os.Open(fname)
+			if err != nil {
+				fmt.Fprintln(b.stderr, "sort:", err)
+				return 1
+			}
+			read_lines(f)
+			f.Close()
+		}
+	}
+
+	key_of := func(s string) string {
+		if ignore_blanks {
+			s = strings.TrimLeft(s, " \t")
+		}
+		if fold {
+			s = strings.ToLower(s)
+		}
+		return s
+	}
+	sort.SliceStable(lines, func(i, j int) bool {
+		a, bv := key_of(lines[i]), key_of(lines[j])
+		var less bool
+		if numeric {
+			ai, aerr := strconv.ParseFloat(strings.Fields(a+" 0")[0], 64)
+			bi, berr := strconv.ParseFloat(strings.Fields(bv+" 0")[0], 64)
+			if aerr == nil && berr == nil {
+				less = ai < bi
+			} else {
+				less = a < bv
+			}
+		} else {
+			less = a < bv
+		}
+		if reverse {
+			return !less
+		}
+		return less
+	})
+	if unique_flag {
+		deduped := lines[:0]
+		for i, l := range lines {
+			if i == 0 || key_of(l) != key_of(lines[i-1]) {
+				deduped = append(deduped, l)
+			}
+		}
+		lines = deduped
+	}
+
+	out := b.stdout
+	if output_file != "" {
+		f, err := os.Create(output_file)
+		if err != nil {
+			fmt.Fprintln(b.stderr, "sort:", err)
+			return 1
+		}
+		defer f.Close()
+		out = f
+	}
+	for _, l := range lines {
+		fmt.Fprintln(out, l)
+	}
+	return 0
+}
+
+// --- uniq ---
+
+func builtin_uniq(b builtin_context) int {
+	var count_flag, dup_only, unique_only, ignore_case bool
+	args := b.args
+	files := []string{}
+	for _, a := range args {
+		if len(a) > 1 && a[0] == '-' {
+			for _, ch := range a[1:] {
+				switch ch {
+				case 'c':
+					count_flag = true
+				case 'd':
+					dup_only = true
+				case 'u':
+					unique_only = true
+				case 'i':
+					ignore_case = true
+				}
+			}
+			continue
+		}
+		files = append(files, a)
+	}
+
+	var r io.Reader = b.stdin
+	var w io.Writer = b.stdout
+	if len(files) >= 1 {
+		f, err := os.Open(files[0])
+		if err != nil {
+			fmt.Fprintln(b.stderr, "uniq:", err)
+			return 1
+		}
+		defer f.Close()
+		r = f
+	}
+	if len(files) >= 2 {
+		f, err := os.Create(files[1])
+		if err != nil {
+			fmt.Fprintln(b.stderr, "uniq:", err)
+			return 1
+		}
+		defer f.Close()
+		w = f
+	}
+
+	eq := func(a, b string) bool {
+		if ignore_case {
+			return strings.EqualFold(a, b)
+		}
+		return a == b
+	}
+	scanner := bufio.NewScanner(r)
+	prev := ""
+	run := 0
+	flush := func(line string, n int) {
+		if n == 0 {
+			return
+		}
+		if dup_only && n == 1 {
+			return
+		}
+		if unique_only && n > 1 {
+			return
+		}
+		if count_flag {
+			fmt.Fprintf(w, "%7d %s\n", n, line)
+		} else {
+			fmt.Fprintln(w, line)
+		}
+	}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if run == 0 {
+			prev = line
+			run = 1
+		} else if eq(line, prev) {
+			run++
+		} else {
+			flush(prev, run)
+			prev = line
+			run = 1
+		}
+	}
+	flush(prev, run)
+	return 0
+}
+
+// --- cut ---
+
+func builtin_cut(b builtin_context) int {
+	var delim string = "\t"
+	var fields_spec, chars_spec string
+	args := b.args
+	files := []string{}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			files = append(files, args[i+1:]...)
+			break
+		}
+		if len(a) > 1 && a[0] == '-' {
+			for j, ch := range a[1:] {
+				switch ch {
+				case 'd':
+					rest := a[2+j:]
+					if rest != "" {
+						delim = rest
+					} else if i+1 < len(args) {
+						i++
+						delim = args[i]
+					}
+					goto next_arg
+				case 'f':
+					rest := a[2+j:]
+					if rest != "" {
+						fields_spec = rest
+					} else if i+1 < len(args) {
+						i++
+						fields_spec = args[i]
+					}
+					goto next_arg
+				case 'c':
+					rest := a[2+j:]
+					if rest != "" {
+						chars_spec = rest
+					} else if i+1 < len(args) {
+						i++
+						chars_spec = args[i]
+					}
+					goto next_arg
+				}
+			}
+		} else {
+			files = append(files, a)
+		}
+	next_arg:
+	}
+
+	// parse field/char range spec like "1,3-5,7"
+	parse_ranges := func(spec string) [][2]int {
+		var ranges [][2]int
+		for _, part := range strings.Split(spec, ",") {
+			part = strings.TrimSpace(part)
+			if idx := strings.Index(part, "-"); idx >= 0 {
+				lo, _ := strconv.Atoi(part[:idx])
+				hi_s := part[idx+1:]
+				if hi_s == "" {
+					ranges = append(ranges, [2]int{lo, 1<<31 - 1})
+				} else {
+					hi, _ := strconv.Atoi(hi_s)
+					ranges = append(ranges, [2]int{lo, hi})
+				}
+			} else {
+				n, _ := strconv.Atoi(part)
+				ranges = append(ranges, [2]int{n, n})
+			}
+		}
+		return ranges
+	}
+	in_range := func(n int, ranges [][2]int) bool {
+		for _, r := range ranges {
+			if n >= r[0] && n <= r[1] {
+				return true
+			}
+		}
+		return false
+	}
+
+	process := func(r io.Reader) {
+		scanner := bufio.NewScanner(r)
+		if fields_spec != "" {
+			ranges := parse_ranges(fields_spec)
+			for scanner.Scan() {
+				parts := strings.Split(scanner.Text(), delim)
+				out := []string{}
+				for i, p := range parts {
+					if in_range(i+1, ranges) {
+						out = append(out, p)
+					}
+				}
+				fmt.Fprintln(b.stdout, strings.Join(out, delim))
+			}
+		} else if chars_spec != "" {
+			ranges := parse_ranges(chars_spec)
+			for scanner.Scan() {
+				runes := []rune(scanner.Text())
+				out := []rune{}
+				for i, r := range runes {
+					if in_range(i+1, ranges) {
+						out = append(out, r)
+					}
+				}
+				fmt.Fprintln(b.stdout, string(out))
+			}
+		}
+	}
+
+	if len(files) == 0 {
+		process(b.stdin)
+	} else {
+		for _, fname := range files {
+			f, err := os.Open(fname)
+			if err != nil {
+				fmt.Fprintln(b.stderr, "cut:", err)
+				return 1
+			}
+			process(f)
+			f.Close()
+		}
+	}
+	return 0
+}
+
+// --- tee ---
+
+func builtin_tee(b builtin_context) int {
+	var append_mode bool
+	files := []string{}
+	for _, a := range b.args {
+		if a == "-a" || a == "--append" {
+			append_mode = true
+			continue
+		}
+		if a == "-i" || a == "--ignore-interrupts" {
+			continue // signal handling not applicable in-process
+		}
+		files = append(files, a)
+	}
+	oflags := os.O_WRONLY | os.O_CREATE
+	if append_mode {
+		oflags |= os.O_APPEND
+	} else {
+		oflags |= os.O_TRUNC
+	}
+	writers := []io.Writer{b.stdout}
+	var closers []io.Closer
+	for _, fname := range files {
+		f, err := os.OpenFile(fname, oflags, 0o644)
+		if err != nil {
+			fmt.Fprintln(b.stderr, "tee:", err)
+			return 1
+		}
+		writers = append(writers, f)
+		closers = append(closers, f)
+	}
+	_, err := io.Copy(io.MultiWriter(writers...), b.stdin)
+	for _, c := range closers {
+		c.Close()
+	}
+	if err != nil {
+		fmt.Fprintln(b.stderr, "tee:", err)
+		return 1
+	}
+	return 0
+}
+
+// --- tr ---
+
+func builtin_tr(b builtin_context) int {
+	var delete_mode, squeeze bool
+	args := b.args
+	positional := []string{}
+	for _, a := range args {
+		if len(a) > 1 && a[0] == '-' && a[1] != '-' {
+			for _, ch := range a[1:] {
+				switch ch {
+				case 'd':
+					delete_mode = true
+				case 's':
+					squeeze = true
+				}
+			}
+			continue
+		}
+		positional = append(positional, a)
+	}
+
+	expand_set := func(s string) []rune {
+		runes := []rune(s)
+		out := []rune{}
+		for i := 0; i < len(runes); i++ {
+			if i+2 < len(runes) && runes[i+1] == '-' {
+				lo, hi := runes[i], runes[i+2]
+				for c := lo; c <= hi; c++ {
+					out = append(out, c)
+				}
+				i += 2
+			} else {
+				out = append(out, runes[i])
+			}
+		}
+		return out
+	}
+
+	if delete_mode {
+		if len(positional) < 1 {
+			fmt.Fprintln(b.stderr, "tr: missing set1")
+			return 1
+		}
+		set1 := expand_set(positional[0])
+		del := map[rune]bool{}
+		for _, r := range set1 {
+			del[r] = true
+		}
+		reader := bufio.NewReader(b.stdin)
+		for {
+			r, _, err := reader.ReadRune()
+			if err != nil {
+				break
+			}
+			if !del[r] {
+				fmt.Fprintf(b.stdout, "%c", r)
+			}
+		}
+		return 0
+	}
+
+	if len(positional) < 2 {
+		fmt.Fprintln(b.stderr, "tr: missing set1 or set2")
+		return 1
+	}
+	set1 := expand_set(positional[0])
+	set2 := expand_set(positional[1])
+	table := map[rune]rune{}
+	for i, r := range set1 {
+		if i < len(set2) {
+			table[r] = set2[i]
+		} else {
+			table[r] = set2[len(set2)-1]
+		}
+	}
+	reader := bufio.NewReader(b.stdin)
+	prev := rune(-1)
+	for {
+		r, _, err := reader.ReadRune()
+		if err != nil {
+			break
+		}
+		if mapped, ok := table[r]; ok {
+			r = mapped
+		}
+		if squeeze && r == prev {
+			continue
+		}
+		fmt.Fprintf(b.stdout, "%c", r)
+		prev = r
+	}
+	return 0
+}
+
+// --- sleep ---
+
+func builtin_sleep(b builtin_context) int {
+	if len(b.args) == 0 {
+		fmt.Fprintln(b.stderr, "sleep: missing operand")
+		return 1
+	}
+	s := b.args[0]
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		// try plain number as seconds
+		secs, nerr := strconv.ParseFloat(s, 64)
+		if nerr != nil {
+			fmt.Fprintln(b.stderr, "sleep: invalid duration:", s)
+			return 1
+		}
+		d = time.Duration(secs * float64(time.Second))
+	}
+	select {
+	case <-b.ctx.Done():
+		return 1
+	case <-time.After(d):
+	}
+	return 0
+}
+
+// --- date ---
+
+func builtin_date(b builtin_context) int {
+	now := time.Now()
+	format := "Mon Jan  2 15:04:05 MST 2006"
+	if len(b.args) > 0 && strings.HasPrefix(b.args[0], "+") {
+		// convert strftime-like format to Go layout
+		format = strings.NewReplacer(
+			"%Y", "2006",
+			"%m", "01",
+			"%d", "02",
+			"%H", "15",
+			"%M", "04",
+			"%S", "05",
+			"%Z", "MST",
+			"%A", "Monday",
+			"%a", "Mon",
+			"%B", "January",
+			"%b", "Jan",
+			"%j", "002",
+			"%e", "2",
+			"%T", "15:04:05",
+			"%D", "01/02/06",
+			"%F", "2006-01-02",
+			"%R", "15:04",
+			"%n", "\n",
+			"%t", "\t",
+		).Replace(b.args[0][1:])
+	}
+	fmt.Fprintln(b.stdout, now.Format(format))
+	return 0
 }

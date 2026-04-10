@@ -33,7 +33,10 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `cat`
 - `chmod`
 - `cp`
+- `cut`
+- `date`
 - `find`
+- `grep`
 - `gzip`
 - `head`
 - `hx`
@@ -45,9 +48,14 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `rm`
 - `sed`
 - `shasum`
+- `sleep`
+- `sort`
 - `tail`
 - `tar`
+- `tee`
 - `touch`
+- `tr`
+- `uniq`
 - `wc`
 - `wget`
 - `xargs`
