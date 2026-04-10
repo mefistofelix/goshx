@@ -4,13 +4,13 @@ cd "$(dirname "$0")"
 mkdir -p build_cache build_cache/tools build_cache/downloads
 if [ ! -f build_cache/go.mod ]; then printf "module buildcache\n" > build_cache/go.mod; fi
 mkdir -p build_cache/gocache build_cache/gomodcache
-if [ ! -x build_cache/tools/go1.25.8/go/bin/go ]; then
-curl -L https://go.dev/dl/go1.25.8.linux-amd64.tar.gz -o build_cache/downloads/go1.25.8.linux-amd64.tar.gz
-rm -rf build_cache/tools/go1.25.8
-mkdir -p build_cache/tools/go1.25.8
-tar -xzf build_cache/downloads/go1.25.8.linux-amd64.tar.gz -C build_cache/tools/go1.25.8
+if [ ! -x build_cache/tools/go1.26.2/go/bin/go ]; then
+curl -L https://go.dev/dl/go1.26.2.linux-amd64.tar.gz -o build_cache/downloads/go1.26.2.linux-amd64.tar.gz
+rm -rf build_cache/tools/go1.26.2
+mkdir -p build_cache/tools/go1.26.2
+tar -xzf build_cache/downloads/go1.26.2.linux-amd64.tar.gz -C build_cache/tools/go1.26.2
 fi
-export GOROOT="$(pwd)/build_cache/tools/go1.25.8/go"
+export GOROOT="$(pwd)/build_cache/tools/go1.26.2/go"
 export PATH="$GOROOT/bin:$PATH"
 export GOCACHE="$(pwd)/build_cache/gocache"
 export GOMODCACHE="$(pwd)/build_cache/gomodcache"

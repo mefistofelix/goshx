@@ -7,12 +7,13 @@ Its goal is to provide a portable single-binary shell with integrated core comma
 
 The project currently provides a first working vertical slice:
 
-- `bash`-style command execution through `mvdan/sh`
+- `bash`-style command execution through the current `mvdan/sh` development branch
 - interactive mode when started without arguments
 - `-c` command execution mode
 - script file execution mode
 - builtin-first command dispatch
 - fallback to external commands when no integrated builtin is available
+- path resolution for in-process builtins through the current `u-root/pkg/core` base abstraction
 
 ## Current builtins
 
@@ -79,6 +80,7 @@ Optional explicit targets:
 - `windows-amd64`
 
 By default each build script builds only for the current platform.
+The bootstrap currently targets `Go 1.26.2`, which was the latest stable release when this update was made.
 
 ## Test
 

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	urootcore "github.com/u-root/u-root/pkg/core"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -47,13 +48,15 @@ type builtin_def struct {
 }
 
 type builtin_context struct {
-	ctx    context.Context
-	app    *shell_app
-	name   string
-	args   []string
-	stdin  io.Reader
-	stdout io.Writer
-	stderr io.Writer
+	ctx         context.Context
+	app         *shell_app
+	name        string
+	args        []string
+	stdin       io.Reader
+	stdout      io.Writer
+	stderr      io.Writer
+	working_dir string
+	core_base   urootcore.Base
 }
 
 type shell_options struct {
@@ -260,19 +263,41 @@ func (app *shell_app) exec_program(ctx context.Context, args []string) error {
 
 func (app *shell_app) run_builtin(ctx context.Context, def builtin_def, args []string) error {
 	hc := interp.HandlerCtx(ctx)
+	base := new_core_base(hc.Stdin, hc.Stdout, hc.Stderr, hc.Dir, hc.Env.Get)
 	code := def.handler(builtin_context{
-		ctx:    ctx,
-		app:    app,
-		name:   def.name,
-		args:   args[1:],
-		stdin:  hc.Stdin,
-		stdout: hc.Stdout,
-		stderr: hc.Stderr,
+		ctx:         ctx,
+		app:         app,
+		name:        def.name,
+		args:        args[1:],
+		stdin:       hc.Stdin,
+		stdout:      hc.Stdout,
+		stderr:      hc.Stderr,
+		working_dir: hc.Dir,
+		core_base:   base,
 	})
 	if code == 0 {
 		return nil
 	}
 	return interp.NewExitStatus(uint8(code))
+}
+
+func new_core_base(stdin io.Reader, stdout io.Writer, stderr io.Writer, workingDir string, envGet func(string) expand.Variable) urootcore.Base {
+	base := urootcore.Base{}
+	base.Init()
+	base.SetIO(stdin, stdout, stderr)
+	base.SetWorkingDir(workingDir)
+	base.SetLookupEnv(func(key string) (string, bool) {
+		vr := envGet(key)
+		if !vr.IsSet() {
+			return "", false
+		}
+		return vr.String(), true
+	})
+	return base
+}
+
+func (b builtin_context) resolve_path(path string) string {
+	return b.core_base.ResolvePath(path)
 }
 
 func builtin_cat(b builtin_context) int {
@@ -284,7 +309,7 @@ func builtin_cat(b builtin_context) int {
 		return 0
 	}
 	for _, path := range b.args {
-		file, err := os.Open(path)
+		file, err := os.Open(b.resolve_path(path))
 		if err != nil {
 			fmt.Fprintln(b.stderr, err)
 			return 1
@@ -314,6 +339,7 @@ func builtin_mkdir(b builtin_context) int {
 		return 1
 	}
 	for _, path := range paths {
+		path = b.resolve_path(path)
 		var err error
 		if parents {
 			err = os.MkdirAll(path, 0o755)
@@ -350,6 +376,7 @@ func builtin_rm(b builtin_context) int {
 		return 1
 	}
 	for _, path := range paths {
+		path = b.resolve_path(path)
 		info, err := os.Lstat(path)
 		if err != nil {
 			if force && errors.Is(err, fs.ErrNotExist) {
@@ -382,6 +409,7 @@ func builtin_touch(b builtin_context) int {
 	}
 	now := time.Now()
 	for _, path := range b.args {
+		path = b.resolve_path(path)
 		file, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			fmt.Fprintln(b.stderr, err)
@@ -406,6 +434,7 @@ func builtin_mv(b builtin_context) int {
 	}
 	dest := b.args[len(b.args)-1]
 	sources := b.args[:len(b.args)-1]
+	dest = b.resolve_path(dest)
 	destInfo, destErr := os.Stat(dest)
 	destIsDir := destErr == nil && destInfo.IsDir()
 	if len(sources) > 1 && !destIsDir {
@@ -413,6 +442,7 @@ func builtin_mv(b builtin_context) int {
 		return 1
 	}
 	for _, source := range sources {
+		source = b.resolve_path(source)
 		target := dest
 		if destIsDir {
 			target = filepath.Join(dest, filepath.Base(source))
@@ -449,6 +479,7 @@ func builtin_cp(b builtin_context) int {
 	}
 	dest := paths[len(paths)-1]
 	sources := paths[:len(paths)-1]
+	dest = b.resolve_path(dest)
 	destInfo, destErr := os.Stat(dest)
 	destIsDir := destErr == nil && destInfo.IsDir()
 	if len(sources) > 1 && !destIsDir {
@@ -456,6 +487,7 @@ func builtin_cp(b builtin_context) int {
 		return 1
 	}
 	for _, source := range sources {
+		source = b.resolve_path(source)
 		target := dest
 		if destIsDir {
 			target = filepath.Join(dest, filepath.Base(source))
@@ -486,7 +518,8 @@ func builtin_ls(b builtin_context) int {
 		paths = []string{"."}
 	}
 	for pathIndex, path := range paths {
-		info, err := os.Stat(path)
+		resolvedPath := b.resolve_path(path)
+		info, err := os.Stat(resolvedPath)
 		if err != nil {
 			fmt.Fprintln(b.stderr, err)
 			return 1
@@ -501,7 +534,7 @@ func builtin_ls(b builtin_context) int {
 			write_ls_entry(b.stdout, path, info, longListing)
 			continue
 		}
-		entries, err := os.ReadDir(path)
+		entries, err := os.ReadDir(resolvedPath)
 		if err != nil {
 			fmt.Fprintln(b.stderr, err)
 			return 1
@@ -534,7 +567,7 @@ func builtin_find(b builtin_context) int {
 	pattern := ""
 	args := append([]string{}, b.args...)
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		start = args[0]
+		start = b.resolve_path(args[0])
 		args = args[1:]
 	}
 	for len(args) > 0 {
@@ -574,7 +607,7 @@ func builtin_head(b builtin_context) int {
 	if !ok {
 		return 1
 	}
-	input, closeFn, err := open_optional_input(b.stdin, files)
+	input, closeFn, err := open_optional_input(b, files)
 	if err != nil {
 		fmt.Fprintln(b.stderr, err)
 		return 1
@@ -601,7 +634,7 @@ func builtin_tail(b builtin_context) int {
 	if !ok {
 		return 1
 	}
-	input, closeFn, err := open_optional_input(b.stdin, files)
+	input, closeFn, err := open_optional_input(b, files)
 	if err != nil {
 		fmt.Fprintln(b.stderr, err)
 		return 1
@@ -650,11 +683,11 @@ func parse_count_args(b builtin_context, defaultCount int, name string) (int, []
 	return count, files, true
 }
 
-func open_optional_input(stdin io.Reader, files []string) (io.Reader, func(), error) {
+func open_optional_input(b builtin_context, files []string) (io.Reader, func(), error) {
 	if len(files) == 0 {
-		return stdin, func() {}, nil
+		return b.stdin, func() {}, nil
 	}
-	file, err := os.Open(files[0])
+	file, err := os.Open(b.resolve_path(files[0]))
 	if err != nil {
 		return nil, func() {}, err
 	}
@@ -703,7 +736,7 @@ func builtin_base64(b builtin_context) int {
 		}
 		files = append(files, arg)
 	}
-	input, closeFn, err := open_optional_input(b.stdin, files)
+	input, closeFn, err := open_optional_input(b, files)
 	if err != nil {
 		fmt.Fprintln(b.stderr, err)
 		return 1
@@ -780,7 +813,7 @@ func builtin_hx_get(b builtin_context) int {
 		fmt.Fprintf(b.stderr, "hx get: unexpected status %s\n", resp.Status)
 		return 1
 	}
-	file, err := os.Create(output)
+	file, err := os.Create(b.resolve_path(output))
 	if err != nil {
 		fmt.Fprintln(b.stderr, err)
 		return 1
@@ -799,10 +832,10 @@ func builtin_hx_extract(b builtin_context) int {
 		fmt.Fprintln(b.stderr, "hx extract: missing archive path")
 		return 1
 	}
-	archivePath := b.args[1]
-	destDir := "."
+	archivePath := b.resolve_path(b.args[1])
+	destDir := b.resolve_path(".")
 	if len(b.args) >= 3 {
-		destDir = b.args[2]
+		destDir = b.resolve_path(b.args[2])
 	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		fmt.Fprintln(b.stderr, err)
@@ -844,6 +877,7 @@ func builtin_hx_shasum(b builtin_context) int {
 		fmt.Fprintln(b.stderr, "hx shasum: missing file")
 		return 1
 	}
+	filePath = b.resolve_path(filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
 		fmt.Fprintln(b.stderr, err)
