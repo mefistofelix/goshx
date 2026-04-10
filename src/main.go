@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	gosedsed "github.com/mefistofelix/gosed/sed"
@@ -14,7 +16,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	urootfind "github.com/u-root/u-root/pkg/core/find"
 	urootgrep "github.com/u-root/u-root/pkg/core/grep"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
+	uroothead "github.com/u-root/u-root/pkg/core/head"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
 	urootshasum "github.com/u-root/u-root/pkg/core/shasum"
 	urootsleep "github.com/u-root/u-root/pkg/core/sleep"
@@ -84,6 +86,27 @@ type shell_options struct {
 	script_args     []string
 	interactive     bool
 	disable_history bool
+	json_mode       bool
+	json_compact    bool
+}
+
+// json_request is the input schema for --json mode.
+type json_request struct {
+	Command     string            `json:"command"`
+	Cwd         string            `json:"cwd"`
+	Env         map[string]string `json:"env"`
+	Stdin       string            `json:"stdin"`
+	MergeOutput bool              `json:"merge_output"`
+	TimeoutMs   int64             `json:"timeout_ms"`
+}
+
+// json_response is the output schema for --json mode.
+type json_response struct {
+	ExitCode   int    `json:"exit_code"`
+	Stdout     string `json:"stdout"`
+	Stderr     string `json:"stderr"`
+	DurationMs int64  `json:"duration_ms"`
+	Error      string `json:"error,omitempty"`
 }
 
 type builtin_handler func(builtin_context) int
@@ -118,15 +141,32 @@ func run_main() int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	if opts.json_mode {
+		return app.run_json_mode(opts.json_compact)
+	}
 	return app.run(opts)
 }
 
 func parse_cli_args(argv []string) (shell_options, error) {
 	opts := shell_options{}
 	args := argv[1:]
-	for len(args) > 0 && args[0] == "--no-history" {
-		opts.disable_history = true
+	// consume leading flags
+	for len(args) > 0 {
+		switch args[0] {
+		case "--no-history":
+			opts.disable_history = true
+		case "--json":
+			opts.json_mode = true
+		case "--compact":
+			opts.json_compact = true
+		default:
+			goto done
+		}
 		args = args[1:]
+	}
+done:
+	if opts.json_mode {
+		return opts, nil
 	}
 	if len(args) == 0 {
 		opts.interactive = true
@@ -197,6 +237,87 @@ func (app *shell_app) run_with_error(err error) int {
 	return 1
 }
 
+func (app *shell_app) run_json_mode(compact bool) int {
+	write_resp := func(resp json_response) int {
+		var out []byte
+		if compact {
+			out, _ = json.Marshal(resp)
+		} else {
+			out, _ = json.MarshalIndent(resp, "", "  ")
+		}
+		fmt.Fprintln(os.Stdout, string(out))
+		return resp.ExitCode
+	}
+
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return write_resp(json_response{ExitCode: 1, Error: "reading request: " + err.Error()})
+	}
+	var req json_request
+	if err := json.Unmarshal(data, &req); err != nil {
+		return write_resp(json_response{ExitCode: 1, Error: "parsing request: " + err.Error()})
+	}
+
+	// apply cwd and env overrides
+	if req.Cwd != "" {
+		app.cwd = req.Cwd
+	}
+	for k, v := range req.Env {
+		app.env = append(app.env, k+"="+v)
+	}
+
+	// wire output capture
+	stdout_buf := &bytes.Buffer{}
+	stderr_buf := &bytes.Buffer{}
+	app.stdout = stdout_buf
+	if req.MergeOutput {
+		app.stderr = stdout_buf
+	} else {
+		app.stderr = stderr_buf
+	}
+	if req.Stdin != "" {
+		app.stdin = strings.NewReader(req.Stdin)
+	} else {
+		app.stdin = strings.NewReader("")
+	}
+
+	if err := app.init_runner(nil, false); err != nil {
+		return write_resp(json_response{ExitCode: 1, Error: "init runner: " + err.Error()})
+	}
+
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	if req.TimeoutMs > 0 {
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
+		defer cancel()
+	}
+
+	file, parse_err := parse_shell_program("-c", req.Command)
+	if parse_err != nil {
+		return write_resp(json_response{ExitCode: 1, Error: parse_err.Error()})
+	}
+
+	start := time.Now()
+	run_err := app.runner.Run(ctx, file)
+	app.sync_runtime_state()
+	duration := time.Since(start)
+
+	resp := json_response{
+		Stdout:     stdout_buf.String(),
+		Stderr:     stderr_buf.String(),
+		DurationMs: duration.Milliseconds(),
+	}
+	if run_err != nil {
+		if status, ok := interp.IsExitStatus(run_err); ok {
+			resp.ExitCode = int(status)
+		} else {
+			resp.ExitCode = 1
+			resp.Error = run_err.Error()
+		}
+	}
+	return write_resp(resp)
+}
+
 func (app *shell_app) init_runner(params []string, interactive bool) error {
 	runner, err := interp.New(
 		interp.Dir(app.cwd),
@@ -223,7 +344,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["cp"] = builtin_def{name: "cp", usage: "cp [-r] source... destination", handler: builtin_cp}
 	app.builtins["find"] = builtin_def{name: "find", usage: "find [path] [-name pattern]", handler: adapt_core_command(func() urootcore.Command { return urootfind.New() })}
 	app.builtins["gzip"] = builtin_def{name: "gzip", usage: "gzip [file...]", handler: adapt_core_command(func() urootcore.Command { return urootgzip.New("gzip") })}
-	app.builtins["head"] = builtin_def{name: "head", usage: "head [-n count] [file]", handler: builtin_head}
+	app.builtins["head"] = builtin_def{name: "head", usage: "head [-n count] [-c bytes] [file...]", handler: adapt_core_command(func() urootcore.Command { return uroothead.New() })}
 	app.builtins["hx"] = builtin_def{name: "hx", usage: "hx [flags] <source> [destination]", handler: builtin_hx}
 	app.builtins["ln"] = builtin_def{name: "ln", usage: "ln [-svfTiLPr] target... link", handler: adapt_core_command(func() urootcore.Command { return urootln.New() })}
 	app.builtins["ls"] = builtin_def{name: "ls", usage: "ls [-a] [-l] [path...]", handler: builtin_ls}
@@ -468,21 +589,25 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up":
 			if m.is_at_history_start() {
 				m.history_prev()
+				m.recalc_height()
 				return m, nil
 			}
 		case "down":
 			if m.is_at_history_end() {
 				m.history_next()
+				m.recalc_height()
 				return m, nil
 			}
 		case "pgup":
 			if m.is_at_history_start() {
 				m.filtered_history_prev()
+				m.recalc_height()
 				return m, nil
 			}
 		case "pgdown":
 			if m.is_at_history_end() {
 				m.filtered_history_next()
+				m.recalc_height()
 				return m, nil
 			}
 		}
@@ -646,6 +771,9 @@ func (m *shell_prompt) history_next() {
 
 func (m *shell_prompt) filtered_history_prev() {
 	filter := m.input.Value()
+	if m.filtered_history_index >= 0 {
+		filter = m.history_filter
+	}
 	if !m.prepare_filtered_history(filter) {
 		return
 	}
@@ -726,6 +854,16 @@ func clamp_int(value int, low int, high int) int {
 func shell_input_is_complete(src string) bool {
 	if strings.TrimSpace(src) == "" {
 		return true
+	}
+	// Check if last non-empty line ends with an unescaped backslash (line continuation).
+	lines := strings.Split(strings.TrimRight(src, " \t\n"), "\n")
+	lastLine := strings.TrimRight(lines[len(lines)-1], " \t")
+	bsCount := 0
+	for i := len(lastLine) - 1; i >= 0 && lastLine[i] == '\\'; i-- {
+		bsCount++
+	}
+	if bsCount%2 == 1 {
+		return false
 	}
 	_, err := parse_shell_program("-c", src)
 	if err == nil {
@@ -1340,86 +1478,6 @@ func builtin_find(b builtin_context) int {
 	return 0
 }
 
-func builtin_head(b builtin_context) int {
-	count, files, ok := parse_count_args(b, 10, "head")
-	if !ok {
-		return 1
-	}
-	input, closeFn, err := open_optional_input(b, files)
-	if err != nil {
-		fmt.Fprintln(b.stderr, err)
-		return 1
-	}
-	defer closeFn()
-	scanner := bufio.NewScanner(input)
-	lines := 0
-	for scanner.Scan() {
-		fmt.Fprintln(b.stdout, scanner.Text())
-		lines++
-		if lines >= count {
-			break
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(b.stderr, err)
-		return 1
-	}
-	return 0
-}
-
-func builtin_tail(b builtin_context) int {
-	count, files, ok := parse_count_args(b, 10, "tail")
-	if !ok {
-		return 1
-	}
-	input, closeFn, err := open_optional_input(b, files)
-	if err != nil {
-		fmt.Fprintln(b.stderr, err)
-		return 1
-	}
-	defer closeFn()
-	scanner := bufio.NewScanner(input)
-	lines := []string{}
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-		if len(lines) > count {
-			lines = lines[1:]
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintln(b.stderr, err)
-		return 1
-	}
-	for _, line := range lines {
-		fmt.Fprintln(b.stdout, line)
-	}
-	return 0
-}
-
-func parse_count_args(b builtin_context, defaultCount int, name string) (int, []string, bool) {
-	count := defaultCount
-	files := []string{}
-	args := append([]string{}, b.args...)
-	for len(args) > 0 {
-		if len(args) >= 2 && args[0] == "-n" {
-			parsed, err := strconv.Atoi(args[1])
-			if err != nil || parsed < 0 {
-				fmt.Fprintf(b.stderr, "%s: invalid count\n", name)
-				return 0, nil, false
-			}
-			count = parsed
-			args = args[2:]
-			continue
-		}
-		files = append(files, args[0])
-		args = args[1:]
-	}
-	if len(files) > 1 {
-		fmt.Fprintf(b.stderr, "%s: only one input file is supported in this slice\n", name)
-		return 0, nil, false
-	}
-	return count, files, true
-}
 
 func open_optional_input(b builtin_context, files []string) (io.Reader, func(), error) {
 	if len(files) == 0 {

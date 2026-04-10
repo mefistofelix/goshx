@@ -9,7 +9,7 @@ The project currently provides a first working vertical slice:
 
 - `bash`-style command execution through the current `mvdan/sh` development branch
 - interactive mode when started without arguments
-- interactive `bubbletea` prompt with multiline editing, caret paste, current-directory prompt, `Tab` completion for builtin commands and filesystem paths, and filtered history navigation with `PgUp`/`PgDn`
+- interactive `bubbletea` prompt with multiline editing, backslash line-continuation, caret paste, current-directory prompt, `Tab` completion for builtin commands and filesystem paths, and filtered history navigation with `PgUp`/`PgDn`
 - interactive history persisted next to the executable under `.goshx/history`, with opt-out via `--no-history`
 - `-c` command execution mode
 - script file execution mode
@@ -91,6 +91,39 @@ Interactive history is loaded from `.goshx/history` relative to the `goshx` bina
 Use `--no-history` to disable history loading and prevent creation of the `.goshx` profile/history directory.
 
 When no real TTY is available, `goshx` keeps using the plain non-interactive line reader fallback.
+
+## JSON mode
+
+`goshx --json` reads a JSON request from stdin, executes the command in-process, and writes a JSON response to stdout.
+This mode is designed for programmatic use by AI agents and automation pipelines.
+
+Request schema:
+
+```json
+{
+  "command":      "echo hello",
+  "cwd":          "/optional/working/dir",
+  "env":          {"KEY": "VALUE"},
+  "stdin":        "optional stdin data",
+  "merge_output": false,
+  "timeout_ms":   0
+}
+```
+
+Response schema:
+
+```json
+{
+  "exit_code":   0,
+  "stdout":      "hello\n",
+  "stderr":      "",
+  "duration_ms": 12,
+  "error":       ""
+}
+```
+
+Output is pretty-printed by default. Use `--compact` to get single-line JSON.
+The process exits with the same code as the executed command.
 
 ## Architecture
 

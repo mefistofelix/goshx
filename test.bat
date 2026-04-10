@@ -106,6 +106,26 @@ if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
 (echo echo no-history& echo.) | test_cache\goshx.exe --no-history >nul 2>nul
 if errorlevel 1 exit /b 1
 if exist test_cache\.goshx echo no-history flag test failed & exit /b 1
+echo {"command":"echo jsontest"} | test_cache\goshx.exe --json > test_cache\json_pretty.txt
+if errorlevel 1 exit /b 1
+findstr /c:"exit_code" test_cache\json_pretty.txt >nul
+if errorlevel 1 echo json mode exit_code field test failed & exit /b 1
+findstr /c:"jsontest" test_cache\json_pretty.txt >nul
+if errorlevel 1 echo json mode stdout test failed & exit /b 1
+findstr /c:"duration_ms" test_cache\json_pretty.txt >nul
+if errorlevel 1 echo json mode duration_ms field test failed & exit /b 1
+echo {"command":"echo compact"} | test_cache\goshx.exe --json --compact > test_cache\json_compact.txt
+if errorlevel 1 exit /b 1
+findstr /c:"exit_code" test_cache\json_compact.txt >nul
+if errorlevel 1 echo json compact mode test failed & exit /b 1
+for /f "usebackq delims=" %%L in (test_cache\json_compact.txt) do (
+  set JSON_LINE=%%L
+)
+if not "%JSON_LINE:~0,1%"=="{" echo json compact not single line test failed & exit /b 1
+echo {"command":"exit 7"} | test_cache\goshx.exe --json > test_cache\json_exitcode.txt
+if not errorlevel 7 exit /b 1
+findstr /c:"\"exit_code\": 7" test_cache\json_exitcode.txt >nul
+if errorlevel 1 echo json exit_code value test failed & exit /b 1
 test_cache\goshx.exe -c "printf 'apple\nbanana\ncherry\n' | grep an" > test_cache\grep.txt
 if errorlevel 1 exit /b 1
 findstr /c:"banana" test_cache\grep.txt >nul
