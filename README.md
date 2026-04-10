@@ -80,11 +80,13 @@ When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that support
 - `Home` moves the caret to the start of the full prompt buffer
 - a prompt prefix that shows the current working directory
 - `End` moves the caret to the end of the full prompt buffer
-- `Up`, `Down`, `PgUp`, and `PgDn` history browsing only when the caret is at the absolute start or end of the prompt buffer
-- history navigation keeps the caret anchored to the same logical edge, start or end, across recalled entries
+- `Up` and `Down` browse unique history entries only when the caret is at the absolute start or end of the prompt buffer
+- `PgUp` and `PgDn` browse unique history entries filtered by the prompt prefix up to the current caret position
+- history navigation keeps the caret anchored to the same logical edge, or to the same caret offset for filtered browsing, across recalled entries
 - `Esc` to clear the current prompt buffer
 
 Interactive history is loaded from `.goshx/history` relative to the `goshx` binary directory and new commands are appended after execution regardless of success or failure. The history file keeps exactly one escaped line per command so multiline input and literal backslashes round-trip correctly.
+Empty commands and consecutive duplicate commands are not appended to the persisted history file.
 Use `--no-history` to disable history loading and prevent creation of the `.goshx` profile/history directory.
 
 When no real TTY is available, `goshx` keeps using the plain non-interactive line reader fallback.
