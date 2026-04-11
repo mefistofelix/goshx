@@ -126,6 +126,7 @@ type shell_prompt struct {
 	completion_token_start int
 	completion_suggestions []string
 	completion_index       int
+	navigation_anchor      prompt_anchor
 	term_height            int
 }
 
@@ -737,25 +738,28 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.insert_newline()
 			return m, nil
 		case "tab":
+			m.navigation_anchor = prompt_anchor{}
 			m.apply_completion()
 			return m, nil
 		case "home":
 			m.reset_completion()
+			m.navigation_anchor = prompt_anchor{edge: prompt_edge_start}
 			m.move_cursor_to_prompt_start()
 			return m, nil
 		case "end":
 			m.reset_completion()
+			m.navigation_anchor = prompt_anchor{edge: prompt_edge_end}
 			m.move_cursor_to_prompt_end()
 			return m, nil
 		case "up":
-			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+			if edge := m.effective_prompt_edge(); edge != prompt_edge_none {
 				m.reset_completion()
 				m.history_prev(edge)
 				m.recalc_height()
 			}
 			return m, nil
 		case "down":
-			if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+			if edge := m.effective_prompt_edge(); edge != prompt_edge_none {
 				m.reset_completion()
 				m.history_next(edge)
 				m.recalc_height()
@@ -776,9 +780,12 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.recalc_height()
-	m.reset_filtered_history()
-	m.reset_completion()
-	m.history_index = len(m.history)
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.reset_filtered_history()
+		m.reset_completion()
+		m.navigation_anchor = prompt_anchor{}
+		m.history_index = len(m.history)
+	}
 	return m, cmd
 }
 
@@ -1000,8 +1007,19 @@ func (m shell_prompt) active_prompt_edge() prompt_edge {
 	return prompt_edge_none
 }
 
+func (m shell_prompt) effective_prompt_edge() prompt_edge {
+	if edge := m.active_prompt_edge(); edge != prompt_edge_none {
+		return edge
+	}
+	return m.navigation_anchor.edge
+}
+
 func (m shell_prompt) current_prompt_anchor() prompt_anchor {
-	return prompt_anchor{edge: m.active_prompt_edge(), offset: m.cursor_offset()}
+	anchor := prompt_anchor{edge: m.active_prompt_edge(), offset: m.cursor_offset()}
+	if anchor.edge == prompt_edge_none && m.navigation_anchor.edge != prompt_edge_none {
+		anchor.edge = m.navigation_anchor.edge
+	}
+	return anchor
 }
 
 func prompt_anchor_from_edge(edge prompt_edge) prompt_anchor {
@@ -1010,6 +1028,7 @@ func prompt_anchor_from_edge(edge prompt_edge) prompt_anchor {
 
 func (m *shell_prompt) set_history_value(value string, anchor prompt_anchor) {
 	display_value := display_history_entry(value)
+	m.navigation_anchor = anchor
 	if anchor.edge == prompt_edge_start {
 		m.set_value_at_start(display_value)
 		return
