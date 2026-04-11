@@ -1016,8 +1016,8 @@ func (m shell_prompt) effective_prompt_edge() prompt_edge {
 
 func (m shell_prompt) current_prompt_anchor() prompt_anchor {
 	anchor := prompt_anchor{edge: m.active_prompt_edge(), offset: m.cursor_offset()}
-	if anchor.edge == prompt_edge_none && m.navigation_anchor.edge != prompt_edge_none {
-		anchor.edge = m.navigation_anchor.edge
+	if anchor.edge == prompt_edge_none && (m.navigation_anchor.edge != prompt_edge_none || m.navigation_anchor.offset != 0) {
+		return m.navigation_anchor
 	}
 	return anchor
 }
