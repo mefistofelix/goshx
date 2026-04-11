@@ -824,13 +824,23 @@ func (m shell_prompt) render_static_prompt_from_value(value string) string {
 	}
 	rendered := make([]string, 0, len(lines))
 	for i, line := range lines {
-		prefix := m.app.prompt()
-		if i > 0 {
-			prefix = m.app.continuation_prompt()
-		}
+		prefix := m.prompt_prefix_for_line(i)
 		rendered = append(rendered, prefix+line)
 	}
 	return strings.Join(rendered, "\n")
+}
+
+func (m shell_prompt) prompt_prefix_for_line(line_idx int) string {
+	prompt := m.app.prompt()
+	if line_idx > 0 {
+		prompt = m.app.continuation_prompt()
+	}
+	max_width := max_int(rune_len(m.app.prompt()), rune_len(m.app.continuation_prompt()))
+	padding := max_width - rune_len(prompt)
+	if padding <= 0 {
+		return prompt
+	}
+	return strings.Repeat(" ", padding) + prompt
 }
 
 func (m shell_prompt) render_quit_prompt_from_value(value string) string {
