@@ -85,6 +85,7 @@ When `goshx` detects a real TTY, it uses a `bubbletea`-based prompt that support
 - `PgUp` and `PgDn` browse unique history entries filtered by the prompt prefix up to the current caret position
 - history navigation keeps the caret anchored to the same logical edge, or to the same caret offset for filtered browsing, across recalled entries
 - `Esc` to clear the current prompt buffer
+- submitted prompts are rendered without extra spacer lines before command output, including multiline input
 
 Interactive history is loaded from `.goshx/history` relative to the `goshx` binary directory and new commands are appended after execution regardless of success or failure. The history file keeps exactly one escaped line per command, and line-continuation backslashes are normalized in the persisted form and reconstructed when entries are recalled into the prompt.
 Empty commands and consecutive duplicate commands are not appended to the persisted history file.

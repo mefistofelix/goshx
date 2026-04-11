@@ -719,10 +719,12 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			m.interrupted = true
+			m.prepare_quit_render()
 			return m, tea.Quit
 		case "ctrl+d":
 			if m.input.Value() == "" {
 				m.eof = true
+				m.prepare_quit_render()
 				return m, tea.Quit
 			}
 			return m, nil
@@ -732,6 +734,7 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if shell_input_is_complete(m.input.Value()) {
 				m.submitted = m.input.Value()
+				m.prepare_quit_render()
 				return m, tea.Quit
 			}
 			m.reset_completion()
@@ -790,6 +793,9 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m shell_prompt) View() string {
+	if m.submitted != "" || m.interrupted || m.eof {
+		return m.render_static_prompt()
+	}
 	return m.input.View()
 }
 
@@ -819,6 +825,27 @@ func (m *shell_prompt) recalc_height() {
 		max_h = 4
 	}
 	m.input.SetHeight(clamp_int(total, 1, max_h))
+}
+
+func (m *shell_prompt) prepare_quit_render() {
+	m.input.SetHeight(1)
+}
+
+func (m shell_prompt) render_static_prompt() string {
+	value := m.input.Value()
+	lines := strings.Split(value, "\n")
+	if len(lines) == 0 {
+		return m.app.prompt()
+	}
+	rendered := make([]string, 0, len(lines))
+	for i, line := range lines {
+		prefix := m.app.prompt()
+		if i > 0 {
+			prefix = m.app.continuation_prompt()
+		}
+		rendered = append(rendered, prefix+line)
+	}
+	return strings.Join(rendered, "\n")
 }
 
 func (m *shell_prompt) clear_input() {
