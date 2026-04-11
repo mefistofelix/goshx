@@ -113,6 +113,7 @@ type shell_prompt struct {
 	input                  textarea.Model
 	submitted              string
 	submitted_empty        bool
+	quit_render            string
 	interrupted            bool
 	eof                    bool
 	history                []string
@@ -778,7 +779,7 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m shell_prompt) View() string {
 	if m.submitted != "" || m.submitted_empty || m.interrupted || m.eof {
-		return m.render_quit_prompt()
+		return m.quit_render
 	}
 	return m.input.View()
 }
@@ -812,11 +813,11 @@ func (m *shell_prompt) recalc_height() {
 }
 
 func (m *shell_prompt) prepare_quit_render() {
+	m.quit_render = m.render_quit_prompt_from_value(m.input.Value())
 	m.input.SetHeight(1)
 }
 
-func (m shell_prompt) render_static_prompt() string {
-	value := m.input.Value()
+func (m shell_prompt) render_static_prompt_from_value(value string) string {
 	lines := strings.Split(value, "\n")
 	if len(lines) == 0 {
 		return m.app.prompt()
@@ -832,8 +833,8 @@ func (m shell_prompt) render_static_prompt() string {
 	return strings.Join(rendered, "\n")
 }
 
-func (m shell_prompt) render_quit_prompt() string {
-	rendered := m.render_static_prompt()
+func (m shell_prompt) render_quit_prompt_from_value(value string) string {
+	rendered := m.render_static_prompt_from_value(value)
 	if m.submitted_empty {
 		return rendered + "\n"
 	}
