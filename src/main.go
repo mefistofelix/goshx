@@ -112,6 +112,7 @@ type shell_prompt struct {
 	app                    *shell_app
 	input                  textarea.Model
 	submitted              string
+	submitted_empty        bool
 	interrupted            bool
 	eof                    bool
 	history                []string
@@ -734,6 +735,7 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if shell_input_is_complete(m.input.Value()) {
 				m.submitted = m.input.Value()
+				m.submitted_empty = strings.TrimSpace(m.submitted) == ""
 				m.prepare_quit_render()
 				return m, tea.Quit
 			}
@@ -793,8 +795,8 @@ func (m shell_prompt) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m shell_prompt) View() string {
-	if m.submitted != "" || m.interrupted || m.eof {
-		return m.render_static_prompt()
+	if m.submitted != "" || m.submitted_empty || m.interrupted || m.eof {
+		return m.render_quit_prompt()
 	}
 	return m.input.View()
 }
@@ -846,6 +848,14 @@ func (m shell_prompt) render_static_prompt() string {
 		rendered = append(rendered, prefix+line)
 	}
 	return strings.Join(rendered, "\n")
+}
+
+func (m shell_prompt) render_quit_prompt() string {
+	rendered := m.render_static_prompt()
+	if m.submitted_empty {
+		return rendered + "\n"
+	}
+	return rendered
 }
 
 func (m *shell_prompt) clear_input() {
