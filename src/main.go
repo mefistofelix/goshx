@@ -541,14 +541,14 @@ func (app *shell_app) run_interactive_bubbletea(stdin_file *os.File) int {
 	}
 }
 
-func append_history_entry(history []string, entry string) []string {
+func append_history_entry(history []string, entry string) ([]string, bool) {
 	if strings.TrimSpace(entry) == "" {
-		return history
+		return history, false
 	}
 	if len(history) > 0 && history[len(history)-1] == entry {
-		return history
+		return history, false
 	}
-	return append(history, entry)
+	return append(history, entry), true
 }
 
 func encode_history_entry(entry string) string {
@@ -635,7 +635,11 @@ func (app *shell_app) append_history(entry string) {
 		return
 	}
 	normalized_entry := encode_history_entry(entry)
-	app.history = append_history_entry(app.history, normalized_entry)
+	var appended bool
+	app.history, appended = append_history_entry(app.history, normalized_entry)
+	if !appended {
+		return
+	}
 	if !app.history_on || app.history_fn == "" {
 		return
 	}
