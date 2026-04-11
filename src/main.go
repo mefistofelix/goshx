@@ -571,7 +571,11 @@ func encode_history_entry(entry string) string {
 	return string(encoded)
 }
 
-func decode_history_entry(entry string) string {
+func normalize_history_entry(entry string) string {
+	return strings.ReplaceAll(entry, "\\\n", history_line_continuation_marker+"\n")
+}
+
+func display_history_entry(entry string) string {
 	return strings.ReplaceAll(entry, history_line_continuation_marker+"\n", "\\\n")
 }
 
@@ -629,7 +633,7 @@ func load_history_file(path string) ([]string, error) {
 		if decode_err != nil {
 			entry = line
 		}
-		entry = decode_history_entry(entry)
+		entry = normalize_history_entry(entry)
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
@@ -645,7 +649,8 @@ func (app *shell_app) append_history(entry string) {
 	if strings.TrimSpace(entry) == "" {
 		return
 	}
-	app.history = append_history_entry(app.history, entry)
+	normalized_entry := encode_history_entry(entry)
+	app.history = append_history_entry(app.history, normalized_entry)
 	if !app.history_on || app.history_fn == "" {
 		return
 	}
@@ -658,7 +663,7 @@ func (app *shell_app) append_history(entry string) {
 		fmt.Fprintln(app.stderr, err)
 		return
 	}
-	_, write_err := fmt.Fprintln(file, strconv.Quote(encode_history_entry(entry)))
+	_, write_err := fmt.Fprintln(file, strconv.Quote(normalized_entry))
 	close_err := file.Close()
 	if write_err != nil || close_err != nil {
 		fmt.Fprintln(app.stderr, first_error(write_err, close_err))
@@ -1004,19 +1009,20 @@ func prompt_anchor_from_edge(edge prompt_edge) prompt_anchor {
 }
 
 func (m *shell_prompt) set_history_value(value string, anchor prompt_anchor) {
+	display_value := display_history_entry(value)
 	if anchor.edge == prompt_edge_start {
-		m.set_value_at_start(value)
+		m.set_value_at_start(display_value)
 		return
 	}
 	if anchor.edge == prompt_edge_end {
-		m.set_value_at_end(value)
+		m.set_value_at_end(display_value)
 		return
 	}
 	offset := anchor.offset
-	if offset > rune_len(value) {
-		offset = rune_len(value)
+	if offset > rune_len(display_value) {
+		offset = rune_len(display_value)
 	}
-	m.set_value_with_cursor(value, offset)
+	m.set_value_with_cursor(display_value, offset)
 }
 
 func (m *shell_prompt) history_prev(edge prompt_edge) {
@@ -1106,7 +1112,8 @@ func filtered_history_entries(history []string, filter string) []string {
 	matches := []string{}
 	lower_filter := strings.ToLower(filter)
 	for _, item := range history {
-		if filter == "" || strings.HasPrefix(strings.ToLower(item), lower_filter) {
+		display_item := display_history_entry(item)
+		if filter == "" || strings.HasPrefix(strings.ToLower(display_item), lower_filter) {
 			matches = append(matches, item)
 		}
 	}
