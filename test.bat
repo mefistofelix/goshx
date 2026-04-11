@@ -107,6 +107,11 @@ echo "echo C:\\new" > test_cache\.goshx\history
 if errorlevel 1 exit /b 1
 findstr /c:"\"echo C:\\\\new\"" test_cache\.goshx\history >nul
 if errorlevel 1 echo history escape format test failed & exit /b 1
+echo "a\u2028\nb" > test_cache\.goshx\history
+(echo echo hist-cont& echo.) | test_cache\goshx.exe >nul 2>nul
+if errorlevel 1 exit /b 1
+findstr /c:"\\\n" test_cache\.goshx\history >nul
+if not errorlevel 1 echo history continuation persistence test failed & exit /b 1
 if exist test_cache\.goshx rmdir /s /q test_cache\.goshx
 (echo echo no-history& echo.) | test_cache\goshx.exe --no-history >nul 2>nul
 if errorlevel 1 exit /b 1

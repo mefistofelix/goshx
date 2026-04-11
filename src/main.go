@@ -548,6 +548,33 @@ func append_history_entry(history []string, entry string) []string {
 	return append(history, entry)
 }
 
+const history_line_continuation_marker = "\u2028"
+
+func encode_history_entry(entry string) string {
+	runes := []rune(entry)
+	encoded := make([]rune, 0, len(runes))
+	for i, r := range runes {
+		if r == '\n' {
+			backslashes := 0
+			for j := len(encoded) - 1; j >= 0 && encoded[j] == '\\'; j-- {
+				backslashes++
+			}
+			if backslashes%2 == 1 {
+				encoded = encoded[:len(encoded)-1]
+				encoded = append(encoded, []rune(history_line_continuation_marker)...)
+			}
+		}
+		if i >= 0 {
+			encoded = append(encoded, r)
+		}
+	}
+	return string(encoded)
+}
+
+func decode_history_entry(entry string) string {
+	return strings.ReplaceAll(entry, history_line_continuation_marker+"\n", "\\\n")
+}
+
 func unique_history_entries(history []string) []string {
 	if len(history) == 0 {
 		return []string{}
@@ -602,6 +629,7 @@ func load_history_file(path string) ([]string, error) {
 		if decode_err != nil {
 			entry = line
 		}
+		entry = decode_history_entry(entry)
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
@@ -630,7 +658,7 @@ func (app *shell_app) append_history(entry string) {
 		fmt.Fprintln(app.stderr, err)
 		return
 	}
-	_, write_err := fmt.Fprintln(file, strconv.Quote(entry))
+	_, write_err := fmt.Fprintln(file, strconv.Quote(encode_history_entry(entry)))
 	close_err := file.Close()
 	if write_err != nil || close_err != nil {
 		fmt.Fprintln(app.stderr, first_error(write_err, close_err))
