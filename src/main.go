@@ -835,10 +835,7 @@ func (m shell_prompt) render_static_prompt_from_value(value string) string {
 
 func (m shell_prompt) render_quit_prompt_from_value(value string) string {
 	rendered := m.render_static_prompt_from_value(value)
-	if m.submitted_empty {
-		return rendered + "\n"
-	}
-	return rendered
+	return rendered + "\n"
 }
 
 func (m *shell_prompt) clear_input() {
