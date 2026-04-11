@@ -550,35 +550,17 @@ func append_history_entry(history []string, entry string) []string {
 	return append(history, entry)
 }
 
-const history_line_continuation_marker = "\u2028"
-
 func encode_history_entry(entry string) string {
-	runes := []rune(entry)
-	encoded := make([]rune, 0, len(runes))
-	for i, r := range runes {
-		if r == '\n' {
-			backslashes := 0
-			for j := len(encoded) - 1; j >= 0 && encoded[j] == '\\'; j-- {
-				backslashes++
-			}
-			if backslashes%2 == 1 {
-				encoded = encoded[:len(encoded)-1]
-				encoded = append(encoded, []rune(history_line_continuation_marker)...)
-			}
-		}
-		if i >= 0 {
-			encoded = append(encoded, r)
-		}
-	}
-	return string(encoded)
+	return strings.ReplaceAll(entry, "\\\n", "\n")
 }
 
 func normalize_history_entry(entry string) string {
-	return strings.ReplaceAll(entry, "\\\n", history_line_continuation_marker+"\n")
+	entry = strings.ReplaceAll(entry, "\\\n", "\n")
+	return entry
 }
 
 func display_history_entry(entry string) string {
-	return strings.ReplaceAll(entry, history_line_continuation_marker+"\n", "\\\n")
+	return strings.ReplaceAll(entry, "\n", "\\\n")
 }
 
 func unique_history_entries(history []string) []string {
