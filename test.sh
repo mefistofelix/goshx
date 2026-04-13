@@ -35,4 +35,6 @@ test_cache/goshx -c "mkdir -p test_cache/hx_out; hx test_cache/gzip.txt.gz test_
 test -f test_cache/hx_out/gzip.txt
 grep -F "zipme" test_cache/hx_out/gzip.txt >/dev/null
 grep -F "gzip.txt" test_cache/hx.txt >/dev/null
+test_cache/goshx -c "uname -s" > test_cache/uname.txt
+test -s test_cache/uname.txt
 echo "Tests passed"

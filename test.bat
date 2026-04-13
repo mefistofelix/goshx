@@ -198,6 +198,10 @@ findstr /c:"2 a" test_cache\uniq.txt >nul
 if errorlevel 1 echo uniq count test failed & exit /b 1
 findstr /c:"3 b" test_cache\uniq.txt >nul
 if errorlevel 1 echo uniq count b test failed & exit /b 1
+test_cache\goshx.exe -c "uname -s" > test_cache\uname.txt
+if errorlevel 1 exit /b 1
+set /p UNAME_OUT=<test_cache\uname.txt
+if "%UNAME_OUT%"=="" echo uname test failed & exit /b 1
 test_cache\goshx.exe -c "echo hello | tee test_cache/tee_file.txt" > test_cache\tee_stdout.txt
 if errorlevel 1 exit /b 1
 findstr /c:"hello" test_cache\tee_file.txt >nul

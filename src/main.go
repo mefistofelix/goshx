@@ -32,6 +32,7 @@ import (
 	uroottail "github.com/u-root/u-root/pkg/core/tail"
 	uroottar "github.com/u-root/u-root/pkg/core/tar"
 	uroottee "github.com/u-root/u-root/pkg/core/tee"
+	urootuname "github.com/u-root/u-root/pkg/core/uname"
 	urootuniq "github.com/u-root/u-root/pkg/core/uniq"
 	urootwc "github.com/u-root/u-root/pkg/core/wc"
 	urootwget "github.com/u-root/u-root/pkg/core/wget"
@@ -454,6 +455,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["tail"] = builtin_def{name: "tail", usage: "tail [-n count] [file]", handler: adapt_core_command(func() urootcore.Command { return uroottail.New() })}
 	app.builtins["tar"] = builtin_def{name: "tar", usage: "tar -c|-x|-t -f file [path]", handler: adapt_core_command(func() urootcore.Command { return uroottar.New() })}
 	app.builtins["touch"] = builtin_def{name: "touch", usage: "touch file...", handler: builtin_touch}
+	app.builtins["uname"] = builtin_def{name: "uname", usage: "uname [-asnrvmp]", handler: adapt_core_command(func() urootcore.Command { return urootuname.New() })}
 	app.builtins["wc"] = builtin_def{name: "wc", usage: "wc [-lwrbc] [file...]", handler: adapt_core_command(func() urootcore.Command { return urootwc.New() })}
 	app.builtins["wget"] = builtin_def{name: "wget", usage: "wget [-O file] url", handler: adapt_core_command(func() urootcore.Command { return urootwget.New() })}
 	app.builtins["xargs"] = builtin_def{name: "xargs", usage: "xargs [options] [command [args...]]", handler: adapt_core_command(func() urootcore.Command { return urootxargs.New() })}

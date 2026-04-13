@@ -49,6 +49,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `tar`
 - `tee`
 - `touch`
+- `uname`
 - `uniq`
 - `wc`
 - `wget`
