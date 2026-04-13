@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./cymbal.exe structure:*)",
+      "Bash(./cymbal.exe outline:*)",
+      "Bash(ls -la C:/Users/Michele/Desktop/goshx/*.md C:/Users/Michele/Desktop/goshx/README.md)"
+    ]
+  }
+}
