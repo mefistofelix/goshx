@@ -25,6 +25,8 @@ test_cache/goshx -c "find test_cache/work -name '*.txt'" > test_cache/find.txt
 grep -F "hello.txt" test_cache/find.txt >/dev/null
 test_cache/goshx -c "export HELLO_VAR=world; echo \$HELLO_VAR" > test_cache/env.txt
 grep -F "world" test_cache/env.txt >/dev/null
+test_cache/goshx -c "echo \$GOSHX_VERSION" > test_cache/goshx_version.txt
+test -s test_cache/goshx_version.txt
 test_cache/goshx -c "echo shell-data | base64 | cat" > test_cache/b64.txt
 grep -F "c2hlbGwtZGF0YQo=" test_cache/b64.txt >/dev/null
 test_cache/goshx -c "echo linkme > test_cache/ln_source.txt; ln test_cache/ln_source.txt test_cache/ln_copy.txt; cat test_cache/ln_copy.txt" > test_cache/ln.txt

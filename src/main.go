@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -240,10 +241,12 @@ func new_shell_app(opts shell_options) (*shell_app, error) {
 	if err != nil {
 		return nil, err
 	}
+	env := append([]string{}, os.Environ()...)
+	env = set_runtime_list_env_value(env, "GOSHX_VERSION", goshx_version())
 	app := &shell_app{
 		cwd:        cwd,
 		argv0:      filepath.Base(os.Args[0]),
-		env:        append([]string{}, os.Environ()...),
+		env:        env,
 		builtins:   map[string]builtin_def{},
 		history:    history,
 		history_on: history_on,
@@ -1399,6 +1402,39 @@ func runtime_list_env_value(env []string, name string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func set_runtime_list_env_value(env []string, name string, value string) []string {
+	if runtime.GOOS == "windows" {
+		upper_name := strings.ToUpper(name)
+		for i, entry := range env {
+			key, _, ok := strings.Cut(entry, "=")
+			if ok && strings.ToUpper(key) == upper_name {
+				env[i] = name + "=" + value
+				return env
+			}
+		}
+		return append(env, name+"="+value)
+	}
+	prefix := name + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
+}
+
+func goshx_version() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	if info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return "dev"
+	}
+	return info.Main.Version
 }
 
 func (app *shell_app) runtime_path_exts() map[string]bool {

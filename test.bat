@@ -37,6 +37,10 @@ test_cache\goshx.exe -c "export HELLO_VAR=world; echo $HELLO_VAR" > test_cache\e
 if errorlevel 1 exit /b 1
 set /p ENV_OUT=<test_cache\env.txt
 if not "%ENV_OUT%"=="world" echo export test failed & exit /b 1
+test_cache\goshx.exe -c "echo $GOSHX_VERSION" > test_cache\goshx_version.txt
+if errorlevel 1 exit /b 1
+set /p GOSHX_VERSION_OUT=<test_cache\goshx_version.txt
+if "%GOSHX_VERSION_OUT%"=="" echo GOSHX_VERSION test failed & exit /b 1
 test_cache\goshx.exe -c "echo shell-data | base64 | cat" > test_cache\b64.txt
 if errorlevel 1 exit /b 1
 findstr /c:"c2hlbGwtZGF0YQo=" test_cache\b64.txt >nul
