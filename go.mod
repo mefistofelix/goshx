@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/mefistofelix/gosed/sed v0.0.0-20260410172536-08c1d9e2cb3f
-	github.com/u-root/u-root v0.16.1-0.20260413140128-42a59a36b53b
+	github.com/u-root/u-root v0.16.1-0.20260413162441-31dbaf6bf00c
 	golang.org/x/term v0.41.0
 	hx v1.0.16
 	mvdan.cc/sh/v3 v3.13.2-0.20260408142357-88fac5cb7aed
@@ -14,7 +14,7 @@ require (
 
 replace hx => github.com/mefistofelix/hx v1.0.16
 
-replace github.com/u-root/u-root => github.com/mefistofelix/u-root v0.16.1-0.20260413140128-42a59a36b53b
+replace github.com/u-root/u-root => github.com/mefistofelix/u-root v0.16.1-0.20260413162441-31dbaf6bf00c
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

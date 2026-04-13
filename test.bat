@@ -62,6 +62,10 @@ test_cache\goshx.exe -c "chmod 644 test_cache/chmod.txt; cat test_cache/chmod.tx
 if errorlevel 1 exit /b 1
 set /p CHMOD_OUT=<test_cache\chmod_out.txt
 if not "%CHMOD_OUT%"=="permtest" echo chmod test failed & exit /b 1
+test_cache\goshx.exe -c "dirname test_cache/work/hello.txt" > test_cache\dirname.txt
+if errorlevel 1 exit /b 1
+findstr /c:"test_cache\\work" test_cache\dirname.txt >nul
+if errorlevel 1 echo dirname test failed & exit /b 1
 test_cache\goshx.exe -c "echo linkme > test_cache/ln_source.txt; ln test_cache/ln_source.txt test_cache/ln_copy.txt; cat test_cache/ln_copy.txt" > test_cache\ln.txt
 if errorlevel 1 exit /b 1
 set /p LN_OUT=<test_cache\ln.txt
@@ -88,6 +92,10 @@ test_cache\goshx.exe -c "echo alpha beta > test_cache/sed.txt; sed 's/beta/gamma
 if errorlevel 1 exit /b 1
 findstr /c:"alpha gamma" test_cache\sed_out.txt >nul
 if errorlevel 1 echo sed test failed & exit /b 1
+test_cache\goshx.exe -c "realpath test_cache/sed.txt" > test_cache\realpath.txt
+if errorlevel 1 exit /b 1
+findstr /c:"test_cache\\sed.txt" test_cache\realpath.txt >nul
+if errorlevel 1 echo realpath test failed & exit /b 1
 test_cache\goshx.exe -c "echo line1 > test_cache/tail.txt; echo line2 >> test_cache/tail.txt; echo line3 >> test_cache/tail.txt; tail -n 2 test_cache/tail.txt" > test_cache\tail_out.txt
 if errorlevel 1 exit /b 1
 findstr /c:"line2" test_cache\tail_out.txt >nul

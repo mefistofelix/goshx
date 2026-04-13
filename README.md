@@ -35,6 +35,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `cat`
 - `chmod`
 - `cp`
+- `dirname`
 - `find`
 - `gzip`
 - `head`
@@ -44,6 +45,7 @@ Integrated in-process builtins currently implemented by `goshx`:
 - `mkdir`
 - `mktemp`
 - `mv`
+- `realpath`
 - `rm`
 - `sed`
 - `shasum`

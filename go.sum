@@ -180,8 +180,8 @@ github.com/mefistofelix/gosed/sed v0.0.0-20260410172536-08c1d9e2cb3f h1:5e0DZ6iY
 github.com/mefistofelix/gosed/sed v0.0.0-20260410172536-08c1d9e2cb3f/go.mod h1:DKiNcNNpqB4iWUG6h4UmUuN7UNeWqzY+F0Oq1Vuelng=
 github.com/mefistofelix/hx v1.0.16 h1:hDwU4XHEvHADvST4FxJkTUULvjhaFid/xg5RO6uzqnA=
 github.com/mefistofelix/hx v1.0.16/go.mod h1:njPZPu1epGgvLhndRpA7TP6K+1oH16Juvf3UHLJdzWA=
-github.com/mefistofelix/u-root v0.16.1-0.20260413140128-42a59a36b53b h1:n9TcwlpnX0MdyLKlF9ae2f4kNrMsDvj9IClwuAKTDKQ=
-github.com/mefistofelix/u-root v0.16.1-0.20260413140128-42a59a36b53b/go.mod h1:YoLUXTuMouWHh8oL+X3afbzfdWIvLr6RHfX6NI9i+xA=
+github.com/mefistofelix/u-root v0.16.1-0.20260413162441-31dbaf6bf00c h1:cxVvMapI6EGXegLbmYIQJdY+AHlJi8e4UhAAcYLHB4A=
+github.com/mefistofelix/u-root v0.16.1-0.20260413162441-31dbaf6bf00c/go.mod h1:YoLUXTuMouWHh8oL+X3afbzfdWIvLr6RHfX6NI9i+xA=
 github.com/mholt/archives v0.1.5 h1:Fh2hl1j7VEhc6DZs2DLMgiBNChUux154a1G+2esNvzQ=
 github.com/mholt/archives v0.1.5/go.mod h1:3TPMmBLPsgszL+1As5zECTuKwKvIfj6YcwWPpeTAXF4=
 github.com/mikelolasagasti/xz v1.0.1 h1:Q2F2jX0RYJUG3+WsM+FJknv+6eVjsjXNDV0KJXZzkD0=

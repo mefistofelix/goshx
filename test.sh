@@ -27,6 +27,8 @@ test_cache/goshx -c "export HELLO_VAR=world; echo \$HELLO_VAR" > test_cache/env.
 grep -F "world" test_cache/env.txt >/dev/null
 test_cache/goshx -c "echo \$GOSHX_VERSION" > test_cache/goshx_version.txt
 test -s test_cache/goshx_version.txt
+test_cache/goshx -c "dirname test_cache/work/hello.txt" > test_cache/dirname.txt
+grep -F "test_cache/work" test_cache/dirname.txt >/dev/null
 mkdir -p test_cache/scripts
 printf 'echo $GOSHX_SCRIPT_DIR\n' > test_cache/scripts/child.sh
 printf 'echo $GOSHX_SCRIPT_DIR\nsource "$GOSHX_SCRIPT_DIR/child.sh"\n' > test_cache/scripts/top.sh
@@ -43,6 +45,10 @@ test_cache/goshx -c "mkdir -p test_cache/hx_out; hx test_cache/gzip.txt.gz test_
 test -f test_cache/hx_out/gzip.txt
 grep -F "zipme" test_cache/hx_out/gzip.txt >/dev/null
 grep -F "gzip.txt" test_cache/hx.txt >/dev/null
+test_cache/goshx -c "echo alpha beta > test_cache/sed.txt; sed 's/beta/gamma/' test_cache/sed.txt" > test_cache/sed_out.txt
+grep -F "alpha gamma" test_cache/sed_out.txt >/dev/null
+test_cache/goshx -c "realpath test_cache/sed.txt" > test_cache/realpath.txt
+grep -F "$(pwd)/test_cache/sed.txt" test_cache/realpath.txt >/dev/null
 test_cache/goshx -c "uname -s" > test_cache/uname.txt
 test -s test_cache/uname.txt
 echo "Tests passed"

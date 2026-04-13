@@ -26,10 +26,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	urootcore "github.com/u-root/u-root/pkg/core"
 	urootchmod "github.com/u-root/u-root/pkg/core/chmod"
+	urootdirname "github.com/u-root/u-root/pkg/core/dirname"
 	urootfind "github.com/u-root/u-root/pkg/core/find"
 	urootgzip "github.com/u-root/u-root/pkg/core/gzip"
 	uroothead "github.com/u-root/u-root/pkg/core/head"
 	urootln "github.com/u-root/u-root/pkg/core/ln"
+	urootrealpath "github.com/u-root/u-root/pkg/core/realpath"
 	urootshasum "github.com/u-root/u-root/pkg/core/shasum"
 	uroottail "github.com/u-root/u-root/pkg/core/tail"
 	uroottar "github.com/u-root/u-root/pkg/core/tar"
@@ -448,6 +450,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["cat"] = builtin_def{name: "cat", usage: "cat [file...]", handler: builtin_cat}
 	app.builtins["chmod"] = builtin_def{name: "chmod", usage: "chmod [-R] mode file...", handler: adapt_core_command(func() urootcore.Command { return urootchmod.New() })}
 	app.builtins["cp"] = builtin_def{name: "cp", usage: "cp [-r] source... destination", handler: builtin_cp}
+	app.builtins["dirname"] = builtin_def{name: "dirname", usage: "dirname path...", handler: adapt_core_command(func() urootcore.Command { return urootdirname.New() })}
 	app.builtins["find"] = builtin_def{name: "find", usage: "find [path] [-name pattern]", handler: adapt_core_command(func() urootcore.Command { return urootfind.New() })}
 	app.builtins["gzip"] = builtin_def{name: "gzip", usage: "gzip [file...]", handler: adapt_core_command(func() urootcore.Command { return urootgzip.New("gzip") })}
 	app.builtins["head"] = builtin_def{name: "head", usage: "head [-n count] [-c bytes] [file...]", handler: adapt_core_command(func() urootcore.Command { return uroothead.New() })}
@@ -457,6 +460,7 @@ func (app *shell_app) register_builtins() {
 	app.builtins["mkdir"] = builtin_def{name: "mkdir", usage: "mkdir [-p] path...", handler: builtin_mkdir}
 	app.builtins["mktemp"] = builtin_def{name: "mktemp", usage: "mktemp [-d] [template]", handler: builtin_mktemp}
 	app.builtins["mv"] = builtin_def{name: "mv", usage: "mv source... destination", handler: builtin_mv}
+	app.builtins["realpath"] = builtin_def{name: "realpath", usage: "realpath [-q] path...", handler: adapt_core_command(func() urootcore.Command { return urootrealpath.New() })}
 	app.builtins["rm"] = builtin_def{name: "rm", usage: "rm [-r] [-f] path...", handler: builtin_rm}
 	app.builtins["sed"] = builtin_def{name: "sed", usage: "sed [options] [script] [file...]", handler: builtin_sed}
 	app.builtins["tee"] = builtin_def{name: "tee", usage: "tee [-a] [file...]", handler: adapt_core_command(func() urootcore.Command { return uroottee.New() })}
