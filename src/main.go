@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -45,18 +46,21 @@ import (
 )
 
 type shell_app struct {
-	cwd        string
-	argv0      string
-	env        []string
-	builtins   map[string]builtin_def
-	history    []string
-	history_on bool
-	history_fn string
-	runner     *interp.Runner
-	stdin      io.Reader
-	stdout     io.Writer
-	stderr     io.Writer
-	is_windows bool
+	cwd            string
+	argv0          string
+	env            []string
+	builtins       map[string]builtin_def
+	history        []string
+	history_on     bool
+	history_fn     string
+	runner         *interp.Runner
+	stdin          io.Reader
+	stdout         io.Writer
+	stderr         io.Writer
+	is_windows     bool
+	state_mu       sync.Mutex
+	script_dirs    []string
+	pending_source bool
 }
 
 type builtin_def struct {
@@ -421,13 +425,16 @@ func json_request_command(req json_request) (string, error) {
 }
 
 func (app *shell_app) init_runner(params []string, interactive bool) error {
+	base_env := expand.ListEnviron(app.env...)
 	runner, err := interp.New(
 		interp.Dir(app.cwd),
-		interp.Env(expand.ListEnviron(app.env...)),
+		interp.Env(dynamic_shell_env{base: base_env, app: app}),
 		interp.Params(params...),
 		interp.StdIO(app.stdin, app.stdout, app.stderr),
 		interp.Interactive(interactive),
+		interp.CallHandler(app.call_handler),
 		interp.ExecHandler(app.exec_program),
+		interp.OpenHandler(app.open_handler),
 	)
 	if err != nil {
 		return err
@@ -1536,15 +1543,21 @@ func (app *shell_app) run_command_text(command string) error {
 }
 
 func (app *shell_app) run_script_file(path string) error {
-	file, err := os.Open(path)
+	abs_path := path
+	if !filepath.IsAbs(abs_path) {
+		abs_path = filepath.Join(app.cwd, abs_path)
+	}
+	file, err := os.Open(abs_path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	parsed, err := parse_shell_reader(path, file)
+	parsed, err := parse_shell_reader(abs_path, file)
 	if err != nil {
 		return err
 	}
+	app.push_script_path(abs_path)
+	defer app.pop_script_dir()
 	defer app.sync_runtime_state()
 	return app.runner.Run(context.Background(), parsed)
 }
@@ -1554,6 +1567,44 @@ func (app *shell_app) sync_runtime_state() {
 		return
 	}
 	app.cwd = app.runner.Dir
+}
+
+func (app *shell_app) push_script_path(path string) {
+	dir := filepath.Dir(path)
+	app.state_mu.Lock()
+	app.script_dirs = append(app.script_dirs, dir)
+	app.state_mu.Unlock()
+}
+
+func (app *shell_app) pop_script_dir() {
+	app.state_mu.Lock()
+	if len(app.script_dirs) > 0 {
+		app.script_dirs = app.script_dirs[:len(app.script_dirs)-1]
+	}
+	app.state_mu.Unlock()
+}
+
+func (app *shell_app) current_script_dir() string {
+	app.state_mu.Lock()
+	defer app.state_mu.Unlock()
+	if len(app.script_dirs) == 0 {
+		return ""
+	}
+	return app.script_dirs[len(app.script_dirs)-1]
+}
+
+func (app *shell_app) mark_pending_source() {
+	app.state_mu.Lock()
+	app.pending_source = true
+	app.state_mu.Unlock()
+}
+
+func (app *shell_app) consume_pending_source() bool {
+	app.state_mu.Lock()
+	defer app.state_mu.Unlock()
+	pending := app.pending_source
+	app.pending_source = false
+	return pending
 }
 
 func parse_shell_program(name string, src string) (*syntax.File, error) {
@@ -1575,6 +1626,30 @@ func (app *shell_app) exec_program(ctx context.Context, args []string) error {
 		return app.run_builtin(ctx, def, args)
 	}
 	return interp.DefaultExecHandler(2*time.Second)(ctx, args)
+}
+
+func (app *shell_app) call_handler(ctx context.Context, args []string) ([]string, error) {
+	if len(args) > 1 && (args[0] == "source" || args[0] == ".") {
+		app.mark_pending_source()
+	}
+	return args, nil
+}
+
+func (app *shell_app) open_handler(ctx context.Context, path string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {
+	f, err := interp.DefaultOpenHandler()(ctx, path, flag, perm)
+	if err != nil {
+		_ = app.consume_pending_source()
+		return nil, err
+	}
+	if !app.consume_pending_source() {
+		return f, nil
+	}
+	abs_path := path
+	if !filepath.IsAbs(abs_path) {
+		abs_path = filepath.Join(interp.HandlerCtx(ctx).Dir, abs_path)
+	}
+	app.push_script_path(abs_path)
+	return script_scope_file{ReadWriteCloser: f, on_close: app.pop_script_dir}, nil
 }
 
 func (app *shell_app) run_builtin(ctx context.Context, def builtin_def, args []string) error {
@@ -1610,6 +1685,54 @@ func new_core_base(stdin io.Reader, stdout io.Writer, stderr io.Writer, workingD
 		return vr.String(), true
 	})
 	return base
+}
+
+type dynamic_shell_env struct {
+	base expand.Environ
+	app  *shell_app
+}
+
+func (e dynamic_shell_env) Get(name string) expand.Variable {
+	if name == "GOSHX_SCRIPT_DIR" {
+		if dir := e.app.current_script_dir(); dir != "" {
+			return expand.Variable{Set: true, Exported: true, Kind: expand.String, Str: dir}
+		}
+		return expand.Variable{}
+	}
+	return e.base.Get(name)
+}
+
+func (e dynamic_shell_env) Each(fn func(name string, vr expand.Variable) bool) {
+	if e.base != nil {
+		if !fn_each_environ(e.base, fn) {
+			return
+		}
+	}
+	if dir := e.app.current_script_dir(); dir != "" {
+		_ = fn("GOSHX_SCRIPT_DIR", expand.Variable{Set: true, Exported: true, Kind: expand.String, Str: dir})
+	}
+}
+
+func fn_each_environ(env expand.Environ, fn func(name string, vr expand.Variable) bool) bool {
+	keep_going := true
+	env.Each(func(name string, vr expand.Variable) bool {
+		keep_going = fn(name, vr)
+		return keep_going
+	})
+	return keep_going
+}
+
+type script_scope_file struct {
+	io.ReadWriteCloser
+	on_close func()
+}
+
+func (f script_scope_file) Close() error {
+	err := f.ReadWriteCloser.Close()
+	if f.on_close != nil {
+		f.on_close()
+	}
+	return err
 }
 
 func (b builtin_context) resolve_path(path string) string {

@@ -41,6 +41,17 @@ test_cache\goshx.exe -c "echo $GOSHX_VERSION" > test_cache\goshx_version.txt
 if errorlevel 1 exit /b 1
 set /p GOSHX_VERSION_OUT=<test_cache\goshx_version.txt
 if "%GOSHX_VERSION_OUT%"=="" echo GOSHX_VERSION test failed & exit /b 1
+if exist test_cache\scripts rmdir /s /q test_cache\scripts
+mkdir test_cache\scripts
+> test_cache\scripts\child.sh echo echo $GOSHX_SCRIPT_DIR
+> test_cache\scripts\top.sh echo echo $GOSHX_SCRIPT_DIR
+>> test_cache\scripts\top.sh echo source "$GOSHX_SCRIPT_DIR/child.sh"
+test_cache\goshx.exe test_cache\scripts\top.sh > test_cache\script_dir.txt
+if errorlevel 1 exit /b 1
+findstr /c:"test_cache\\scripts" test_cache\script_dir.txt >nul
+if errorlevel 1 echo GOSHX_SCRIPT_DIR top-level test failed & exit /b 1
+for /f %%C in ('find /c /v "" ^< test_cache\script_dir.txt') do set SCRIPT_DIR_LINES=%%C
+if not "%SCRIPT_DIR_LINES%"=="2" echo GOSHX_SCRIPT_DIR nested source line count test failed & exit /b 1
 test_cache\goshx.exe -c "echo shell-data | base64 | cat" > test_cache\b64.txt
 if errorlevel 1 exit /b 1
 findstr /c:"c2hlbGwtZGF0YQo=" test_cache\b64.txt >nul

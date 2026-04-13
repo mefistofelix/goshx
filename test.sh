@@ -27,6 +27,12 @@ test_cache/goshx -c "export HELLO_VAR=world; echo \$HELLO_VAR" > test_cache/env.
 grep -F "world" test_cache/env.txt >/dev/null
 test_cache/goshx -c "echo \$GOSHX_VERSION" > test_cache/goshx_version.txt
 test -s test_cache/goshx_version.txt
+mkdir -p test_cache/scripts
+printf 'echo $GOSHX_SCRIPT_DIR\n' > test_cache/scripts/child.sh
+printf 'echo $GOSHX_SCRIPT_DIR\nsource "$GOSHX_SCRIPT_DIR/child.sh"\n' > test_cache/scripts/top.sh
+test_cache/goshx test_cache/scripts/top.sh > test_cache/script_dir.txt
+grep -F "$(pwd)/test_cache/scripts" test_cache/script_dir.txt >/dev/null
+test "$(wc -l < test_cache/script_dir.txt | tr -d ' ')" = "2"
 test_cache/goshx -c "echo shell-data | base64 | cat" > test_cache/b64.txt
 grep -F "c2hlbGwtZGF0YQo=" test_cache/b64.txt >/dev/null
 test_cache/goshx -c "echo linkme > test_cache/ln_source.txt; ln test_cache/ln_source.txt test_cache/ln_copy.txt; cat test_cache/ln_copy.txt" > test_cache/ln.txt

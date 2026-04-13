@@ -12,6 +12,7 @@ The project currently provides a first working vertical slice:
 - interactive `bubbletea` prompt with multiline editing, backslash line-continuation, caret paste, current-directory prompt, `Tab` completion for builtin commands and filesystem paths, command lookup based on the shell's current `PATH`/`PATHEXT`, and filtered history navigation with `PgUp`/`PgDn`
 - interactive history persisted next to the executable under `.goshx/history`, with opt-out via `--no-history`
 - runtime shell identification via `GOSHX_VERSION`
+- dynamic current-script directory via `GOSHX_SCRIPT_DIR` during script execution and nested `source` calls
 - `-c` command execution mode
 - script file execution mode
 - builtin-first command dispatch
